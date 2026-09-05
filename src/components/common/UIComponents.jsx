@@ -182,7 +182,7 @@ export const StatCard = ({ title, value, change, isPositive, comparisonText = 'v
   const iconBg = {
     purple: 'bg-purple-50 text-purple-700 border-purple-100',
     teal: 'bg-teal-50 text-teal-700 border-teal-100',
-    blue: 'bg-blue-50 text-blue-100 text-blue-700 border-blue-100',
+    blue: 'bg-blue-50 text-blue-700 border-blue-100',
     amber: 'bg-amber-50 text-amber-700 border-amber-100',
     rose: 'bg-rose-50 text-rose-700 border-rose-100',
     emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
@@ -207,54 +207,62 @@ export const StatCard = ({ title, value, change, isPositive, comparisonText = 'v
   }).join(' ');
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 p-4.5 shadow-xs transition-all hover:shadow-md hover:border-slate-300 min-w-0 flex flex-col justify-between group">
+    <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 shadow-xs transition-all hover:shadow-md hover:border-slate-300 min-w-0 w-full flex flex-col justify-between group">
       {/* Top: Category Title + Subtle Icon Container */}
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">{title}</span>
+      <div className="flex items-start justify-between gap-1.5 mb-1.5 min-w-0 w-full">
+        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider leading-[1.25] flex-1 min-w-0 whitespace-normal break-words pr-0.5">
+          {title}
+        </span>
         {Icon && (
-          <div className={`p-2 rounded-xl border ${iconBg[color] || iconBg.purple} shrink-0 transition-transform group-hover:scale-105`}>
-            <Icon className="w-4 h-4" />
+          <div className={`p-1.5 sm:p-2 rounded-xl border ${iconBg[color] || iconBg.purple} shrink-0 transition-transform group-hover:scale-105 ml-1`}>
+            <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </div>
         )}
       </div>
 
       {/* Middle: Dominant Financial Value */}
-      <div className="my-1 min-w-0">
-        <span className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight block truncate font-sans">
+      <div className="my-1 sm:my-1.5 min-w-0 w-full">
+        <span className="text-lg sm:text-xl lg:text-[21px] xl:text-[19px] 2xl:text-2xl font-extrabold text-slate-900 tracking-tight block font-sans min-w-0 leading-none break-all sm:break-normal">
           {value}
         </span>
       </div>
 
       {/* Bottom: Trend Badge, Context & Mini Sparkline Chart */}
-      <div className="mt-2 pt-2 border-t border-slate-100 flex items-end justify-between gap-2 min-w-0">
-        <div className="min-w-0 flex flex-col">
+      <div className="mt-2 pt-2 border-t border-slate-100 flex items-end justify-between gap-1.5 min-w-0 w-full">
+        <div className="min-w-0 flex-1 flex flex-col justify-center pr-1">
           {change ? (
-            <span className={`inline-flex items-center text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ${
+            <span className={`inline-flex items-center text-[10px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 max-w-max leading-none my-0.5 ${
               isPositive === true
-                ? 'bg-emerald-50 text-emerald-700'
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                 : isPositive === false
-                ? 'bg-rose-50 text-rose-700'
-                : 'bg-slate-100 text-slate-700'
+                ? 'bg-rose-50 text-rose-700 border border-rose-100'
+                : 'bg-slate-100 text-slate-700 border border-slate-200'
             }`}>
               {isPositive === true ? '↑ ' : isPositive === false ? '↓ ' : ''}{change}
             </span>
           ) : null}
-          <span className="text-slate-400 text-[10px] truncate mt-0.5">{comparisonText}</span>
+          {comparisonText ? (
+            <span className="text-slate-400 text-[10px] font-medium leading-tight whitespace-normal break-words mt-0.5 min-w-0 block">
+              {comparisonText}
+            </span>
+          ) : null}
         </div>
 
         {/* Embedded SVG Mini Sparkline */}
-        <div className="w-16 h-8 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
-          <svg className="w-full h-full overflow-visible" viewBox="0 0 100 32">
-            <polyline
-              fill="none"
-              stroke={sparkColor[color] || '#714b67'}
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              points={points}
-            />
-          </svg>
-        </div>
+        {sparklineData && sparklineData.length > 0 && (
+          <div className="w-12 sm:w-14 h-7 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity flex-none ml-auto">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 32">
+              <polyline
+                fill="none"
+                stroke={sparkColor[color] || '#714b67'}
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points={points}
+              />
+            </svg>
+          </div>
+        )}
       </div>
     </div>
   );

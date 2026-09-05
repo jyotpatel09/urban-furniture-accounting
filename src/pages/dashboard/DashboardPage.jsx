@@ -193,7 +193,7 @@ export const DashboardPage = () => {
       </div>
 
       {/* 3. Financial KPI Section (6 Cards with Embedded SVG Sparklines) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 min-w-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4 min-w-0">
         <StatCard
           title="Total Sales"
           value="₹12,45,000"
@@ -219,7 +219,7 @@ export const DashboardPage = () => {
           value="₹3,45,000"
           change="Debtors"
           isPositive={null}
-          comparisonText="Accounts Receivable"
+          comparisonText="A/R (Debtors)"
           icon={ArrowUpRight}
           color="blue"
           sparklineData={[50, 40, 65, 55, 70, 60]}
@@ -229,7 +229,7 @@ export const DashboardPage = () => {
           value="₹2,18,000"
           change="Creditors"
           isPositive={null}
-          comparisonText="Accounts Payable"
+          comparisonText="A/P (Creditors)"
           icon={ArrowDownRight}
           color="rose"
           sparklineData={[40, 60, 45, 35, 50, 40]}
