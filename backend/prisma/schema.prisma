@@ -1,0 +1,519 @@
+// Prisma Schema for Urban Furniture Accounting ERP (Odoo Hackathon Final Round)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  ACCOUNTANT
+  CONTACT
+}
+
+enum ContactType {
+  CUSTOMER
+  VENDOR
+  BOTH
+}
+
+enum ProductType {
+  GOODS
+  SERVICE
+  COMBO
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  CAPITAL
+  INCOME
+  EXPENSE
+}
+
+enum JournalType {
+  SALES
+  PURCHASE
+  BANK
+  CASH
+  GENERAL
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  POSTED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  CONFIRMED
+  RECEIVED
+  CANCELLED
+}
+
+enum VendorBillStatus {
+  DRAFT
+  POSTED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK
+}
+
+enum PaymentStatus {
+  POSTED
+  CANCELLED
+}
+
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(CONTACT)
+  contactId    String?
+  contact      Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  createdSalesOrders    SalesOrder[]    @relation("CreatedSalesOrders")
+  createdInvoices       Invoice[]       @relation("CreatedInvoices")
+  createdPurchaseOrders PurchaseOrder[] @relation("CreatedPurchaseOrders")
+  createdVendorBills    VendorBill[]    @relation("CreatedVendorBills")
+  createdPayments       Payment[]       @relation("CreatedPayments")
+  createdJournalEntries JournalEntry[]  @relation("CreatedJournalEntries")
+  auditLogs             AuditLog[]
+
+  @@index([email])
+}
+
+model Contact {
+  id             String      @id @default(uuid())
+  name           String
+  type           ContactType @default(CUSTOMER)
+  email          String      @unique
+  phone          String
+  address        String
+  city           String
+  state          String
+  pincode        String
+  avatar         String?
+  totalSales     Decimal     @default(0) @db.Decimal(14, 2)
+  paidSales      Decimal     @default(0) @db.Decimal(14, 2)
+  unpaidSales    Decimal     @default(0) @db.Decimal(14, 2)
+  totalPurchases Decimal     @default(0) @db.Decimal(14, 2)
+  paidPurchases  Decimal     @default(0) @db.Decimal(14, 2)
+  unpaidPurchases Decimal    @default(0) @db.Decimal(14, 2)
+  outstanding    Decimal     @default(0) @db.Decimal(14, 2)
+  isArchived     Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  users          User[]
+  salesOrders    SalesOrder[]
+  invoices       Invoice[]
+  purchaseOrders PurchaseOrder[]
+  vendorBills    VendorBill[]
+  customerPayments Payment[]    @relation("CustomerPayments")
+  vendorPayments   Payment[]    @relation("VendorPayments")
+
+  @@index([email])
+  @@index([type])
+}
+
+model Product {
+  id           String      @id @default(uuid())
+  name         String
+  type         ProductType @default(GOODS)
+  category     String
+  salesPrice   Decimal     @db.Decimal(14, 2)
+  purchasePrice Decimal    @db.Decimal(14, 2)
+  taxRate      Decimal     @default(18) @db.Decimal(5, 2)
+  status       String      @default("Active")
+  sku          String      @unique
+  description  String?
+  salesCount   Int         @default(0)
+  purchaseCount Int        @default(0)
+  openingStock Int         @default(100)
+  stockIn      Int         @default(0)
+  stockOut     Int         @default(0)
+  currentStock Int         @default(100)
+  reorderLevel Int         @default(10)
+  isArchived   Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  salesOrderItems   SalesOrderItem[]
+  invoiceItems      InvoiceItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  vendorBillItems   VendorBillItem[]
+
+  @@index([name])
+  @@index([category])
+  @@index([sku])
+}
+
+model Account {
+  id         String      @id @default(uuid())
+  code       String      @unique
+  name       String
+  type       AccountType
+  category   String
+  parentName String?
+  balance    Decimal     @default(0) @db.Decimal(14, 2)
+  isActive   Boolean     @default(true)
+  isArchived Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  journalLines JournalEntryLine[]
+  journals     Journal[]
+
+  @@index([code])
+  @@index([type])
+}
+
+model Journal {
+  id                   String      @id @default(uuid())
+  name                 String
+  code                 String      @unique
+  type                 JournalType
+  defaultAccountId     String?
+  defaultAccount       Account?    @relation(fields: [defaultAccountId], references: [id], onDelete: SetNull)
+  isActive             Boolean     @default(true)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  journalEntries       JournalEntry[]
+}
+
+model Tax {
+  id        String   @id @default(uuid())
+  name      String
+  rate      Decimal  @db.Decimal(5, 2)
+  type      String   @default("PERCENTAGE")
+  account   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AnalyticAccount {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  responsible String
+  company     String   @default("Urban Furniture")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  budgets      Budget[]
+  journalLines JournalEntryLine[]
+}
+
+model Budget {
+  id                String           @id @default(uuid())
+  name              String
+  period            String
+  periodStart       DateTime
+  periodEnd         DateTime
+  responsible       String
+  analyticAccountId String
+  analyticAccount   AnalyticAccount  @relation(fields: [analyticAccountId], references: [id], onDelete: Cascade)
+  plannedAmount     Decimal          @db.Decimal(14, 2)
+  achievedAmount    Decimal          @default(0) @db.Decimal(14, 2)
+  remainingAmount   Decimal          @default(0) @db.Decimal(14, 2)
+  utilization       Decimal          @default(0) @db.Decimal(5, 2)
+  status            String           @default("In Progress")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([periodStart, periodEnd])
+}
+
+model SalesOrder {
+  id            String           @id @default(uuid())
+  number        String           @unique
+  customerId    String
+  customer      Contact          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  date          DateTime
+  status        SalesOrderStatus @default(DRAFT)
+  paymentStatus String           @default("Unpaid")
+  subtotal      Decimal          @db.Decimal(14, 2)
+  taxAmount     Decimal          @db.Decimal(14, 2)
+  totalAmount   Decimal          @db.Decimal(14, 2)
+  notes         String?
+  createdById   String
+  createdBy     User             @relation("CreatedSalesOrders", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  items         SalesOrderItem[]
+  invoices      Invoice[]
+
+  @@index([number])
+  @@index([customerId])
+  @@index([status])
+}
+
+model SalesOrderItem {
+  id           String     @id @default(uuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  description  String?
+  quantity     Int
+  unitPrice    Decimal    @db.Decimal(14, 2)
+  taxRate      Decimal    @db.Decimal(5, 2)
+  taxAmount    Decimal    @db.Decimal(14, 2)
+  lineSubtotal Decimal    @db.Decimal(14, 2)
+  lineTotal    Decimal    @db.Decimal(14, 2)
+}
+
+model Invoice {
+  id             String        @id @default(uuid())
+  number         String        @unique
+  customerId     String
+  customer       Contact       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salesOrderId   String?
+  salesOrder     SalesOrder?   @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  invoiceDate    DateTime
+  dueDate        DateTime
+  status         InvoiceStatus @default(DRAFT)
+  subtotal       Decimal       @db.Decimal(14, 2)
+  taxAmount      Decimal       @db.Decimal(14, 2)
+  totalAmount    Decimal       @db.Decimal(14, 2)
+  paidAmount     Decimal       @default(0) @db.Decimal(14, 2)
+  remainingAmount Decimal      @db.Decimal(14, 2)
+  journalEntryId String?       @unique
+  journalEntry   JournalEntry? @relation("InvoiceJournalEntry", fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdById    String
+  createdBy      User          @relation("CreatedInvoices", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  items          InvoiceItem[]
+  payments       Payment[]
+
+  @@index([number])
+  @@index([customerId])
+  @@index([status])
+  @@index([invoiceDate])
+}
+
+model InvoiceItem {
+  id           String   @id @default(uuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  description  String?
+  quantity     Int
+  unitPrice    Decimal  @db.Decimal(14, 2)
+  taxRate      Decimal  @db.Decimal(5, 2)
+  taxAmount    Decimal  @db.Decimal(14, 2)
+  lineSubtotal Decimal  @db.Decimal(14, 2)
+  lineTotal    Decimal  @db.Decimal(14, 2)
+}
+
+model PurchaseOrder {
+  id          String              @id @default(uuid())
+  number      String              @unique
+  vendorId    String
+  vendor      Contact             @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  date        DateTime
+  status      PurchaseOrderStatus @default(DRAFT)
+  billStatus  String              @default("Unbilled")
+  subtotal    Decimal             @db.Decimal(14, 2)
+  taxAmount   Decimal             @db.Decimal(14, 2)
+  totalAmount Decimal             @db.Decimal(14, 2)
+  notes       String?
+  createdById String
+  createdBy   User                @relation("CreatedPurchaseOrders", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  items       PurchaseOrderItem[]
+  vendorBills VendorBill[]
+
+  @@index([number])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  description     String?
+  quantity        Int
+  unitPrice       Decimal       @db.Decimal(14, 2)
+  taxRate         Decimal       @db.Decimal(5, 2)
+  taxAmount       Decimal       @db.Decimal(14, 2)
+  lineSubtotal    Decimal       @db.Decimal(14, 2)
+  lineTotal       Decimal       @db.Decimal(14, 2)
+}
+
+model VendorBill {
+  id              String           @id @default(uuid())
+  number          String           @unique
+  vendorId        String
+  vendor          Contact          @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  billDate        DateTime
+  dueDate         DateTime
+  status          VendorBillStatus @default(DRAFT)
+  subtotal        Decimal          @db.Decimal(14, 2)
+  taxAmount       Decimal          @db.Decimal(14, 2)
+  totalAmount     Decimal          @db.Decimal(14, 2)
+  paidAmount      Decimal          @default(0) @db.Decimal(14, 2)
+  remainingAmount Decimal          @db.Decimal(14, 2)
+  journalEntryId  String?          @unique
+  journalEntry    JournalEntry?    @relation("VendorBillJournalEntry", fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdById     String
+  createdBy       User             @relation("CreatedVendorBills", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  items           VendorBillItem[]
+  payments        Payment[]
+
+  @@index([number])
+  @@index([vendorId])
+  @@index([status])
+  @@index([billDate])
+}
+
+model VendorBillItem {
+  id           String     @id @default(uuid())
+  vendorBillId String
+  vendorBill   VendorBill @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  description  String?
+  quantity     Int
+  unitPrice    Decimal    @db.Decimal(14, 2)
+  taxRate      Decimal    @db.Decimal(5, 2)
+  taxAmount    Decimal    @db.Decimal(14, 2)
+  lineSubtotal Decimal    @db.Decimal(14, 2)
+  lineTotal    Decimal    @db.Decimal(14, 2)
+}
+
+model Payment {
+  id                   String        @id @default(uuid())
+  number               String        @unique
+  paymentDate          DateTime
+  amount               Decimal       @db.Decimal(14, 2)
+  method               PaymentMethod @default(BANK)
+  cashOrBankAccountId  String?
+  customerId           String?
+  customer             Contact?      @relation("CustomerPayments", fields: [customerId], references: [id], onDelete: SetNull)
+  vendorId             String?
+  vendor               Contact?      @relation("VendorPayments", fields: [vendorId], references: [id], onDelete: SetNull)
+  invoiceId            String?
+  invoice              Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  vendorBillId         String?
+  vendorBill           VendorBill?   @relation(fields: [vendorBillId], references: [id], onDelete: SetNull)
+  status               PaymentStatus @default(POSTED)
+  journalEntryId       String?       @unique
+  journalEntry         JournalEntry? @relation("PaymentJournalEntry", fields: [journalEntryId], references: [id], onDelete: SetNull)
+  reference            String?
+  createdById          String
+  createdBy            User          @relation("CreatedPayments", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt            DateTime      @default(now())
+
+  @@index([number])
+  @@index([invoiceId])
+  @@index([vendorBillId])
+  @@index([paymentDate])
+}
+
+model JournalEntry {
+  id          String             @id @default(uuid())
+  number      String             @unique
+  journalId   String
+  journal     Journal            @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  date        DateTime
+  reference   String?
+  sourceType  String?
+  sourceId    String?
+  status      JournalEntryStatus @default(POSTED)
+  totalDebit  Decimal            @db.Decimal(14, 2)
+  totalCredit Decimal            @db.Decimal(14, 2)
+  createdById String
+  createdBy   User               @relation("CreatedJournalEntries", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  lines       JournalEntryLine[]
+  invoice     Invoice?           @relation("InvoiceJournalEntry")
+  vendorBill  VendorBill?        @relation("VendorBillJournalEntry")
+  payment     Payment?           @relation("PaymentJournalEntry")
+
+  @@index([number])
+  @@index([date])
+  @@index([status])
+  @@index([journalId])
+}
+
+model JournalEntryLine {
+  id                String           @id @default(uuid())
+  journalEntryId    String
+  journalEntry      JournalEntry     @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId         String
+  account           Account          @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  description       String?
+  debit             Decimal          @default(0) @db.Decimal(14, 2)
+  credit            Decimal          @default(0) @db.Decimal(14, 2)
+  analyticAccountId String?
+  analyticAccount   AnalyticAccount? @relation(fields: [analyticAccountId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([journalEntryId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  @@index([entity])
+  @@index([action])
+}

@@ -238,15 +238,6 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile
         </div>
       </div>
 
-      {/* Sidebar Footer */}
-      {!isCollapsed && (
-        <div className="p-3 border-t border-purple-800/40 bg-purple-950/60">
-          <div className="bg-purple-900/30 rounded-lg p-2 border border-purple-800/40 text-center">
-            <p className="text-[11px] font-semibold text-purple-200">Odoo Hackathon Finalist</p>
-            <p className="text-[10px] text-teal-400 font-medium">Urban Furniture ERP v1.0</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 

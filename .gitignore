@@ -11,15 +11,15 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+backend/node_modules
+backend/dist
 
 # Environments & secrets
 .env
 .env.local
 .env.*.local
 *.local
-
-# Backend directory (Separate repo/deployment scope)
-backend/
+backend/.env
 
 # Editor directories and files
 .vscode/*
