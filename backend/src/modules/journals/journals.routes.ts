@@ -6,10 +6,11 @@ import { validateBody } from '../../middleware/validation.middleware.js';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requireRole('ADMIN', 'ACCOUNTANT'));
 
 router.get('/', getJournals);
 router.get('/:id', getJournalById);
-router.post('/', requireRole('ADMIN', 'ACCOUNTANT'), validateBody(createJournalSchema), createJournal);
-router.patch('/:id', requireRole('ADMIN', 'ACCOUNTANT'), updateJournal);
+router.post('/', validateBody(createJournalSchema), createJournal);
+router.patch('/:id', updateJournal);
 
 export default router;

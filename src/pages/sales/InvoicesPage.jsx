@@ -1,33 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { PageHeader, Card, Table, StatusBadge, Button, Modal, Input, Select, StatCard } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
 import { Search, Eye, CreditCard, FileText, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 
+// Normalize invoice from backend: backend returns totalAmount, paidAmount, remainingAmount
+function normalizeInvoice(inv) {
+  return {
+    ...inv,
+    customer: inv.customer?.name || inv.customerName || '—',
+    amount: Number(inv.totalAmount || inv.amount || 0),
+    paid: Number(inv.paidAmount || inv.paid || 0),
+    remaining: Number(inv.remainingAmount || inv.remaining || 0),
+    date: inv.invoiceDate || inv.date,
+    status: inv.status || 'DRAFT',
+  };
+}
+
 export const InvoicesPage = () => {
   const navigate = useNavigate();
-  const invoices = useStore((state) => state.customerInvoices);
+  const rawInvoices = useStore((state) => state.customerInvoices);
   const registerPayment = useStore((state) => state.registerCustomerPayment);
+  const fetchCustomerInvoices = useStore((state) => state.fetchCustomerInvoices);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [activeInvModal, setActiveInvModal] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [payError, setPayError] = useState('');
 
   // Payment Form State
   const [payAmount, setPayAmount] = useState(0);
   const [payMethod, setPayMethod] = useState('Bank - HDFC Account');
   const [payRef, setPayRef] = useState('');
 
+  useEffect(() => {
+    setLoading(true);
+    fetchCustomerInvoices().finally(() => setLoading(false));
+  }, [fetchCustomerInvoices]);
+
+  const invoices = (Array.isArray(rawInvoices) ? rawInvoices : []).map(normalizeInvoice);
+
   // Summary Metrics
-  const totalAmount = invoices.reduce((acc, i) => acc + (i.amount || 0), 0);
-  const totalPaid = invoices.reduce((acc, i) => acc + (i.paid || 0), 0);
-  const totalOutstanding = invoices.reduce((acc, i) => acc + (i.remaining || 0), 0);
-  const overdueCount = invoices.filter(i => i.status === 'Overdue').length;
+  const totalAmount = invoices.reduce((acc, i) => acc + i.amount, 0);
+  const totalPaid = invoices.reduce((acc, i) => acc + i.paid, 0);
+  const totalOutstanding = invoices.reduce((acc, i) => acc + i.remaining, 0);
+  const overdueCount = invoices.filter(i => (i.status || '').toUpperCase() === 'OVERDUE').length;
 
   const filtered = invoices.filter((i) => {
-    const matchesSearch = i.id.toLowerCase().includes(search.toLowerCase()) || i.customer.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || i.status === statusFilter;
+    const invId = (i.number || i.id || '').toLowerCase();
+    const customer = (i.customer || '').toLowerCase();
+    const matchesSearch = invId.includes(search.toLowerCase()) || customer.includes(search.toLowerCase());
+    const invStatus = (i.status || '').toUpperCase();
+    const matchesStatus =
+      statusFilter === 'All' ||
+      invStatus === statusFilter.toUpperCase() ||
+      i.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
@@ -35,24 +65,39 @@ export const InvoicesPage = () => {
     setActiveInvModal(inv);
     setPayAmount(inv.remaining || inv.amount);
     setPayRef(`PAY-C-${Date.now().toString().slice(-4)}`);
+    setPayError('');
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    if (activeInvModal) {
-      registerPayment(activeInvModal.id, payAmount, payMethod, payRef);
+    if (!activeInvModal) return;
+    setSubmitting(true);
+    setPayError('');
+    try {
+      await registerPayment(activeInvModal.id, payAmount, payMethod, payRef);
       setActiveInvModal(null);
+    } catch (err) {
+      console.error('Payment error:', err);
+      setPayError(err.message || 'Failed to register payment. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const columns = [
     {
       header: 'Invoice Number',
-      cell: (r) => <span className="font-mono font-bold text-purple-900">{r.id}</span>
+      cell: (r) => <span className="font-mono font-bold text-purple-900">{r.number || r.id}</span>
     },
     { header: 'Customer', cell: (r) => <span className="font-semibold text-slate-900">{r.customer}</span> },
-    { header: 'Invoice Date', accessor: 'date' },
-    { header: 'Due Date', accessor: 'dueDate' },
+    {
+      header: 'Invoice Date',
+      cell: (r) => r.date ? new Date(r.date).toLocaleDateString('en-IN') : '—'
+    },
+    {
+      header: 'Due Date',
+      cell: (r) => r.dueDate ? new Date(r.dueDate).toLocaleDateString('en-IN') : '—'
+    },
     {
       header: 'Total Amount',
       cell: (r) => <span className="font-bold text-slate-900 font-mono">₹{r.amount.toLocaleString('en-IN')}</span>
@@ -115,7 +160,7 @@ export const InvoicesPage = () => {
           </div>
 
           <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto">
-            {['All', 'Draft', 'Posted', 'Partially Paid', 'Paid', 'Overdue'].map((st) => (
+            {['All', 'DRAFT', 'POSTED', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -125,21 +170,31 @@ export const InvoicesPage = () => {
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
                 }`}
               >
-                {st}
+                {st === 'All' ? 'All' : st.replace('_', ' ').charAt(0) + st.replace('_', ' ').slice(1).toLowerCase()}
               </button>
             ))}
           </div>
         </div>
 
-        <Table columns={columns} data={filtered} onRowClick={(row) => navigate(`/sales/invoices/${row.id}`)} />
+        {loading ? (
+          <div className="py-12 text-center text-gray-500 text-sm">Loading invoices from database...</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-gray-500 text-sm">No invoices found.</div>
+        ) : (
+          <Table columns={columns} data={filtered} onRowClick={(row) => navigate(`/sales/invoices/${row.id}`)} />
+        )}
       </Card>
 
       {/* Register Payment Modal */}
-      <Modal isOpen={!!activeInvModal} onClose={() => setActiveInvModal(null)} title={`Register Payment for ${activeInvModal?.id}`}>
+      <Modal isOpen={!!activeInvModal} onClose={() => { setActiveInvModal(null); setPayError(''); }} title={`Register Payment for ${activeInvModal?.number || activeInvModal?.id}`}>
         <form onSubmit={handleRegister} className="space-y-4">
+          {payError && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">{payError}</div>
+          )}
+
           <div className="p-3 bg-purple-50 rounded-xl text-xs text-purple-900 flex justify-between font-semibold border border-purple-100">
             <span>Customer: <b>{activeInvModal?.customer}</b></span>
-            <span>Remaining: <b>₹{activeInvModal?.remaining.toLocaleString('en-IN')}</b></span>
+            <span>Remaining: <b>₹{(activeInvModal?.remaining || 0).toLocaleString('en-IN')}</b></span>
           </div>
 
           <Input
@@ -166,8 +221,10 @@ export const InvoicesPage = () => {
           />
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setActiveInvModal(null)}>Cancel</Button>
-            <Button type="submit" variant="teal">Confirm & Post Payment</Button>
+            <Button type="button" variant="secondary" onClick={() => { setActiveInvModal(null); setPayError(''); }}>Cancel</Button>
+            <Button type="submit" variant="teal" disabled={submitting}>
+              {submitting ? 'Processing...' : 'Confirm & Post Payment'}
+            </Button>
           </div>
         </form>
       </Modal>

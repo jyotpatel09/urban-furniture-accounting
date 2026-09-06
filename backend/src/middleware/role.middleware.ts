@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from './auth.middleware.js';
 import { sendError } from '../utils/response.js';
 
-export function requireRole(...allowedRoles: Array<'ADMIN' | 'ACCOUNTANT' | 'CONTACT'>) {
+export function requireRole(...allowedRoles: Array<'ADMIN' | 'ACCOUNTANT' | 'SALES_PURCHASE'>) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return sendError(res, 'Authentication required.', 'UNAUTHENTICATED', 401);

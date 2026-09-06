@@ -15,7 +15,7 @@ router.use(requireAuth);
 
 router.get('/', getInvoices);
 router.get('/:id', getInvoiceById);
-router.post('/', requireRole('ADMIN', 'ACCOUNTANT'), validateBody(createInvoiceSchema), createInvoice);
+router.post('/', requireRole('ADMIN', 'ACCOUNTANT', 'SALES_PURCHASE'), validateBody(createInvoiceSchema), createInvoice);
 router.post('/:id/post', requireRole('ADMIN', 'ACCOUNTANT'), postInvoice);
 
 export default router;

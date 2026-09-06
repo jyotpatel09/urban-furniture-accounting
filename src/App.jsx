@@ -48,8 +48,20 @@ import { BalanceSheetPage } from './pages/reports/BalanceSheetPage';
 import { ProfitLossPage } from './pages/reports/ProfitLossPage';
 import { BudgetReportPage } from './pages/reports/BudgetReportPage';
 
+import { useStore } from './store/useStore';
+import { AccessDeniedPage } from './components/common/AccessDeniedPage';
+
 // Settings Module
 import { SettingsPage } from './pages/settings/SettingsPage';
+
+function ProtectedRoute({ children, allowedRoles, moduleName }) {
+  const user = useStore((state) => state.user);
+  const currentRole = user?.role || 'Administrator';
+  if (allowedRoles && !allowedRoles.includes(currentRole)) {
+    return <AccessDeniedPage moduleName={moduleName} />;
+  }
+  return children;
+}
 
 export default function App() {
   return (
@@ -69,45 +81,127 @@ export default function App() {
         <Route path="/contacts/:id" element={<ContactDetailPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/products/:id" element={<ProductDetailPage />} />
-        <Route path="/accounts" element={<ChartOfAccountsPage />} />
-        <Route path="/journals" element={<JournalsPage />} />
+        
+        <Route path="/accounts" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Chart of Accounts">
+            <ChartOfAccountsPage />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/journals" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Journals Configuration">
+            <JournalsPage />
+          </ProtectedRoute>
+        } />
 
         {/* Sales */}
-        <Route path="/sales/orders" element={<SalesOrdersPage />} />
-        <Route path="/sales/orders/:id" element={<SalesOrderDetailPage />} />
+        <Route path="/sales/orders" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Sales & Purchase User']} moduleName="Sales Orders Creation">
+            <SalesOrdersPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/sales/orders/:id" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Sales & Purchase User']} moduleName="Sales Order Detail">
+            <SalesOrderDetailPage />
+          </ProtectedRoute>
+        } />
         <Route path="/sales/invoices" element={<InvoicesPage />} />
         <Route path="/sales/invoices/:id" element={<InvoiceDetailPage />} />
         <Route path="/sales/payments" element={<PaymentsPage />} />
 
         {/* Purchase */}
-        <Route path="/purchase/orders" element={<PurchaseOrdersPage />} />
-        <Route path="/purchase/orders/:id" element={<PurchaseOrderDetailPage />} />
+        <Route path="/purchase/orders" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Sales & Purchase User']} moduleName="Purchase Orders Creation">
+            <PurchaseOrdersPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/purchase/orders/:id" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Sales & Purchase User']} moduleName="Purchase Order Detail">
+            <PurchaseOrderDetailPage />
+          </ProtectedRoute>
+        } />
         <Route path="/purchase/bills" element={<VendorBillsPage />} />
         <Route path="/purchase/bills/:id" element={<VendorBillDetailPage />} />
         <Route path="/purchase/payments" element={<PurchasePaymentsPage />} />
 
         {/* Accounting */}
-        <Route path="/accounting/journal-entries" element={<JournalEntriesPage />} />
-        <Route path="/accounting/journal-entries/:id" element={<JournalEntryDetailPage />} />
-        <Route path="/accounting/ledger" element={<GeneralLedgerPage />} />
-        <Route path="/accounting/taxes" element={<TaxesPage />} />
-        <Route path="/accounting/analytic-accounts" element={<AnalyticAccountsPage />} />
+        <Route path="/accounting/journal-entries" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Journal Entries Management">
+            <JournalEntriesPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/accounting/journal-entries/:id" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Journal Entry Detail">
+            <JournalEntryDetailPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/accounting/ledger" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="General Ledger">
+            <GeneralLedgerPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/accounting/taxes" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Tax Configuration">
+            <TaxesPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/accounting/analytic-accounts" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Analytic Cost Accounts">
+            <AnalyticAccountsPage />
+          </ProtectedRoute>
+        } />
 
         {/* Budgeting */}
-        <Route path="/budgets" element={<BudgetsPage />} />
-        <Route path="/budgets/:id" element={<BudgetDetailPage />} />
+        <Route path="/budgets" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Budgets Management">
+            <BudgetsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/budgets/:id" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Budget Detail">
+            <BudgetDetailPage />
+          </ProtectedRoute>
+        } />
 
         {/* Reports */}
         <Route path="/reports" element={<Navigate to="/reports/profit-loss" replace />} />
-        <Route path="/reports/balance-sheet" element={<BalanceSheetPage />} />
-        <Route path="/reports/profit-loss" element={<ProfitLossPage />} />
-        <Route path="/reports/budget" element={<BudgetReportPage />} />
+        <Route path="/reports/balance-sheet" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Balance Sheet Statement">
+            <BalanceSheetPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/reports/profit-loss" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Profit & Loss Statement">
+            <ProfitLossPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/reports/budget" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin', 'Accountant']} moduleName="Budget Reports">
+            <BudgetReportPage />
+          </ProtectedRoute>
+        } />
 
         {/* Settings */}
-        <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-        <Route path="/settings/general" element={<SettingsPage />} />
-        <Route path="/settings/users" element={<SettingsPage />} />
-        <Route path="/settings/roles" element={<SettingsPage />} />
+        <Route path="/settings" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin']} moduleName="System Settings">
+            <Navigate to="/settings/general" replace />
+          </ProtectedRoute>
+        } />
+        <Route path="/settings/general" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin']} moduleName="General Settings">
+            <SettingsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/settings/users" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin']} moduleName="User Management">
+            <SettingsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/settings/roles" element={
+          <ProtectedRoute allowedRoles={['Administrator', 'Admin']} moduleName="Role & Permission Administration">
+            <SettingsPage />
+          </ProtectedRoute>
+        } />
       </Route>
 
       {/* Catch-all fallback */}

@@ -1,10 +1,11 @@
-import { PrismaClient } from '@prisma/client';
+const fs = require('fs');
+
+const seedContent = import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-// Pseudo-random generator for idempotency
-function sfc32(a: number, b: number, c: number, d: number) {
+function sfc32(a, b, c, d) {
   return function() {
     a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0; 
     let t = (a + b) | 0;
@@ -19,43 +20,43 @@ function sfc32(a: number, b: number, c: number, d: number) {
 }
 const rand = sfc32(1234, 5678, 9012, 3456);
 
-function randomInt(min: number, max: number) {
+function randomInt(min, max) {
   return Math.floor(rand() * (max - min + 1)) + min;
 }
-function randomElement<T>(arr: T[]): T {
+function randomElement(arr) {
   return arr[randomInt(0, arr.length - 1)];
 }
-function randomDate(startMonthsAgo: number, endMonthsAgo: number) {
+function randomDate(startMonthsAgo, endMonthsAgo) {
   const d = new Date();
   d.setMonth(d.getMonth() - randomInt(endMonthsAgo, startMonthsAgo));
   d.setDate(randomInt(1, 28));
   return d;
 }
-function generateUnique(prefix: string, num: number) {
-  return `${prefix}-${String(num).padStart(3, '0')}`;
+function generateUnique(prefix, num) {
+  return \\\\\\-\\\\\\;
 }
 
 async function main() {
-  console.log('🌱 Starting Urban Furniture ERP DEMO Data Seeding (200+ Records Per Module)...');
+  console.log('?? Starting Urban Furniture ERP Demo Data Seeding...');
 
-  // 1. Core Users
+  // 1. Core Users (Preserving existing)
   const passwordHash = await bcrypt.hash('Password@123', 10);
   const users = [
     { email: 'admin@urbanfurniture.in', name: 'Admin User', role: 'ADMIN' },
     { email: 'accountant@urbanfurniture.in', name: 'Accountant User', role: 'ACCOUNTANT' },
     { email: 'sales@urbanfurniture.in', name: 'Sales/Purchase User', role: 'SALES_PURCHASE' }
   ];
-  let adminId = '';
+  let adminId = null;
   for (const u of users) {
     const created = await prisma.user.upsert({
       where: { email: u.email },
       update: {},
-      create: { name: u.name, email: u.email, passwordHash, role: u.role as any }
+      create: { name: u.name, email: u.email, passwordHash, role: u.role }
     });
     if (u.role === 'ADMIN') adminId = created.id;
   }
   
-  // 2. Chart of Accounts & Journals (Idempotent)
+  // 2. Chart of Accounts
   const accountDefs = [
     { code: '101000', name: 'Cash', type: 'ASSET', category: 'ASSETS' },
     { code: '102000', name: 'Bank - HDFC Account', type: 'ASSET', category: 'ASSETS' },
@@ -64,7 +65,7 @@ async function main() {
     { code: '201000', name: 'Creditors (Accounts Payable)', type: 'LIABILITY', category: 'LIABILITIES' },
     { code: '202000', name: 'Output GST', type: 'LIABILITY', category: 'LIABILITIES' },
     { code: '202001', name: 'Input GST', type: 'ASSET', category: 'ASSETS' },
-    { code: '301000', name: "Owner's Capital Account", type: 'CAPITAL', category: 'CAPITAL' },
+    { code: '301000', name: 'Owner\\'s Capital Account', type: 'CAPITAL', category: 'CAPITAL' },
     { code: '401000', name: 'Sales Revenue', type: 'INCOME', category: 'INCOME' },
     { code: '501000', name: 'Purchases', type: 'EXPENSE', category: 'EXPENSES' },
     { code: '502000', name: 'Operating Expenses', type: 'EXPENSE', category: 'EXPENSES' },
@@ -74,13 +75,15 @@ async function main() {
     await prisma.account.upsert({
       where: { code: acc.code },
       update: {},
-      create: { ...acc, type: acc.type as any, balance: 0, parentName: acc.category }
+      create: { ...acc, balance: 0, parentName: acc.category }
     });
   }
   
+  // Get main accounts for accounting
   const accounts = await prisma.account.findMany();
-  const getAccId = (code: string) => accounts.find(a => a.code === code)?.id as string;
+  const getAccId = (code) => accounts.find(a => a.code === code)?.id;
   
+  // 3. Journals
   const journalsData = [
     { code: 'SJ', name: 'Sales Journal', type: 'SALES', defaultAccountId: getAccId('103000') },
     { code: 'PJ', name: 'Purchase Journal', type: 'PURCHASE', defaultAccountId: getAccId('201000') },
@@ -92,87 +95,112 @@ async function main() {
     await prisma.journal.upsert({
       where: { code: j.code },
       update: {},
-      create: { ...j, type: j.type as any }
+      create: { ...j }
     });
   }
   const journals = await prisma.journal.findMany();
-  const getJnlId = (code: string) => journals.find(j => j.code === code)?.id as string;
+  const getJnlId = (code) => journals.find(j => j.code === code)?.id;
   
+  // 4. Taxes
   await prisma.tax.upsert({
     where: { id: 'TAX-03' },
     update: {},
     create: { id: 'TAX-03', name: 'GST 18%', rate: 18, account: '202000 - Output GST' }
   });
 
-  // 3. Contacts (200+)
-  console.log('Generating 220 Contacts...');
-  const cities = ['Ahmedabad', 'Vadodara', 'Surat', 'Rajkot', 'Mumbai', 'Pune', 'Delhi', 'Bengaluru', 'Hyderabad', 'Chennai'];
-  const contactSuffixes = ['Pvt Ltd', 'Technologies', 'Solutions', 'Industries', 'Enterprises', 'Corporation', 'Logistics', 'Group', 'Traders'];
-  const contactRoots = ['Shree', 'Patel', 'Gujarat', 'National', 'Sunrise', 'Apollo', 'Zenith', 'Apex', 'Pioneer', 'Metro', 'Urban', 'Royal', 'Crown', 'Silver', 'Golden', 'Diamond', 'Prime', 'First'];
+  // 5. Contacts (20 Customers, 10 Vendors)
+  const contactNamesCust = [
+    'Shree Infrastructure Pvt Ltd', 'Patel Technologies', 'Ahmedabad Corporate Solutions',
+    'Gujarat Business Hub', 'Sunrise Industries', 'Reliance Retail', 'Adani Enterprises',
+    'Zydus Lifesciences', 'Torrent Power', 'Nirma Limited', 'Symphony Limited',
+    'Arvind Fashions', 'KHS Machinery', 'Intas Pharmaceuticals', 'Cadila Healthcare',
+    'Tata Motors Sales', 'L&T Construction', 'Godrej Properties', 'Wipro Limited', 'Infosys Regional'
+  ];
+  const contactNamesVend = [
+    'WoodCraft Industries', 'Jyot PVT LTD', 'Gujarat Furniture Supplies', 'Premium Hardware Suppliers',
+    'Asian Paints', 'Century Plyboards', 'Greenlam Industries', 'Merino Laminates',
+    'Hettich India', 'Hafele Hardware'
+  ];
   
-  const createdCustomers = [];
-  const createdVendors = [];
-  
-  for (let i = 1; i <= 220; i++) {
-    const isCustomer = i <= 150; // 150 Customers, 70 Vendors
-    const root = randomElement(contactRoots);
-    const suffix = randomElement(contactSuffixes);
-    const city = randomElement(cities);
-    const name = `${root} ${city} ${suffix} ${i}`;
-    const email = `contact_${i}@${root.toLowerCase()}${city.toLowerCase()}.com`;
-    
-    const contact = await prisma.contact.upsert({
-      where: { email },
+  let createdCustomers = [];
+  for (let i = 0; i < contactNamesCust.length; i++) {
+    const id = generateUnique('DEMO-CUST', i + 1);
+    const c = await prisma.contact.upsert({
+      where: { id },
       update: {},
       create: {
-        name,
-        email,
-        phone: '+91 ' + randomInt(7000000000, 9999999999),
-        city,
-        state: 'State',
-        pincode: String(randomInt(100000, 999999)),
-        address: `${randomInt(1, 999)} Business Park, ${city}`,
-        type: isCustomer ? 'CUSTOMER' : 'VENDOR',
+        id,
+        name: contactNamesCust[i],
+        email: \\\contact\\\@\\\.com\\\,
+        phone: '+91 9' + randomInt(100000000, 999999999),
+        city: randomElement(['Ahmedabad', 'Vadodara', 'Surat', 'Rajkot', 'Mumbai', 'Pune', 'Delhi', 'Bengaluru']),
+        state: 'Gujarat',
+        type: 'CUSTOMER',
       }
     });
-    if (isCustomer) createdCustomers.push(contact);
-    else createdVendors.push(contact);
+    createdCustomers.push(c);
+  }
+  let createdVendors = [];
+  for (let i = 0; i < contactNamesVend.length; i++) {
+    const id = generateUnique('DEMO-VEND', i + 1);
+    const v = await prisma.contact.upsert({
+      where: { id },
+      update: {},
+      create: {
+        id,
+        name: contactNamesVend[i],
+        email: \\\sales@\\\.com\\\,
+        phone: '+91 8' + randomInt(100000000, 999999999),
+        city: randomElement(['Ahmedabad', 'Vadodara', 'Surat', 'Mumbai', 'Delhi']),
+        state: 'Gujarat',
+        type: 'VENDOR',
+      }
+    });
+    createdVendors.push(v);
   }
 
-  // 4. Products (200+)
-  console.log('Generating 220 Products...');
-  const productAdjs = ['Executive', 'Ergonomic', 'Modular', 'Premium', 'Standard', 'Luxury', 'Compact', 'Classic', 'Modern', 'Heavy Duty'];
-  const productNouns = ['Desk', 'Chair', 'Table', 'Cabinet', 'Sofa', 'Workstation', 'Bookshelf', 'Stool', 'Partition', 'Lounge'];
-  const createdProducts = [];
-  
-  for (let i = 1; i <= 220; i++) {
-    const adj = randomElement(productAdjs);
-    const noun = randomElement(productNouns);
-    const name = `${adj} ${noun} ${i}`;
-    const sku = generateUnique('DEMO-PRD', i);
-    const salesPrice = randomInt(5000, 50000);
-    const purchasePrice = Math.floor(salesPrice * 0.6); // 40% margin
-    
-    const product = await prisma.product.upsert({
+  // 6. Products (30)
+  const productBases = [
+    { n: 'Executive Desk', p: 25000, c: 15000 }, { n: 'Executive Desk Pro', p: 45000, c: 28000 },
+    { n: 'Office Chair', p: 5500, c: 3000 }, { n: 'Ergonomic Office Chair', p: 12500, c: 7500 },
+    { n: 'Conference Table', p: 55000, c: 32000 }, { n: 'Reception Desk', p: 35000, c: 20000 },
+    { n: 'Filing Cabinet', p: 8500, c: 5000 }, { n: 'Storage Cabinet', p: 11000, c: 6500 },
+    { n: 'Workstation', p: 18000, c: 10000 }, { n: 'Modular Workstation', p: 22000, c: 13000 },
+    { n: 'Visitor Chair', p: 3500, c: 2000 }, { n: 'Meeting Table', p: 15000, c: 9000 },
+    { n: 'Bookshelf', p: 9500, c: 5500 }, { n: 'Sofa', p: 28000, c: 16000 },
+    { n: 'Reception Sofa', p: 32000, c: 18000 }, { n: 'Computer Table', p: 6500, c: 3500 },
+    { n: 'Pedestal Drawer', p: 4500, c: 2500 }, { n: 'Wooden Desk', p: 14000, c: 8000 },
+    { n: 'Glass Conference Table', p: 65000, c: 40000 }, { n: 'Office Partition', p: 12000, c: 7000 },
+    { n: 'Cafeteria Table', p: 7500, c: 4000 }, { n: 'Cafeteria Chair', p: 2500, c: 1200 },
+    { n: 'Manager Desk', p: 28000, c: 16000 }, { n: 'Lounge Chair', p: 14000, c: 8000 },
+    { n: 'Standing Desk', p: 22000, c: 14000 }, { n: 'Whiteboard', p: 3000, c: 1500 },
+    { n: 'Notice Board', p: 1500, c: 700 }, { n: 'Shoe Rack', p: 4000, c: 2000 },
+    { n: 'Credenza', p: 16000, c: 9000 }, { n: 'Training Room Table', p: 8000, c: 4500 }
+  ];
+  let createdProducts = [];
+  for (let i = 0; i < productBases.length; i++) {
+    const sku = generateUnique('DEMO-PRD', i + 1);
+    const p = await prisma.product.upsert({
       where: { sku },
       update: {},
       create: {
-        name,
+        name: productBases[i].n,
         sku,
         category: 'Office Furniture',
         type: 'GOODS',
-        salesPrice,
-        purchasePrice,
+        salesPrice: productBases[i].p,
+        purchasePrice: productBases[i].c,
         taxRate: 18,
-        description: `High quality ${name} suitable for offices.`,
-        currentStock: randomInt(10, 500),
+        description: \\\High quality \\\\\\,
+        currentStock: randomInt(10, 100),
       }
     });
-    createdProducts.push(product);
+    createdProducts.push(p);
   }
 
-  async function createJE(date: Date, journalId: string, ref: string, lines: any[]) {
-    const jeNum = `JE-${ref}-${randomInt(1000, 999999)}`;
+  // Common Journal Entry Generator
+  async function createJE(date, journalId, ref, lines) {
+    const jeNum = generateUnique('DEMO-JE', randomInt(1000, 999999));
     let totalDebit = 0;
     let totalCredit = 0;
     for (const l of lines) {
@@ -201,16 +229,16 @@ async function main() {
     });
   }
 
-  // 5. Purchase Orders -> Bills -> Payments -> JEs (200)
-  console.log('Generating 200 Purchase Orders, 200 Vendor Bills, 200 Payments, 400 JEs...');
-  for (let i = 1; i <= 200; i++) {
-    const number = generateUnique('DEMO-PO', i);
+  // 7. Purchase Orders (25) -> Bills -> Payments -> JE
+  console.log('?? Seeding Purchase Orders, Bills, Payments and Journals...');
+  for (let i = 0; i < 25; i++) {
+    const number = generateUnique('DEMO-PO', i + 1);
     const existing = await prisma.purchaseOrder.findUnique({ where: { number } });
     if (existing) continue;
 
     const vendor = randomElement(createdVendors);
     const date = randomDate(1, 10);
-    const itemsCount = randomInt(1, 4);
+    const itemsCount = randomInt(1, 5);
     
     let subtotal = 0;
     let taxAmount = 0;
@@ -218,7 +246,7 @@ async function main() {
     for (let j = 0; j < itemsCount; j++) {
       const prod = randomElement(createdProducts);
       const qty = randomInt(5, 20);
-      const unitPrice = parseFloat(prod.purchasePrice as any);
+      const unitPrice = parseFloat(prod.purchasePrice);
       const lineSub = qty * unitPrice;
       const lineTax = lineSub * 0.18;
       subtotal += lineSub;
@@ -251,8 +279,8 @@ async function main() {
     });
 
     // Create Vendor Bill
-    const billNum = generateUnique('DEMO-BILL', i);
-    const billDate = new Date(date.getTime() + 86400000 * 2);
+    const billNum = generateUnique('DEMO-BILL', i + 1);
+    const billDate = new Date(date.getTime() + 86400000 * 2); // 2 days later
     const bill = await prisma.vendorBill.create({
       data: {
         number: billNum,
@@ -271,16 +299,17 @@ async function main() {
       }
     });
 
+    // Bill Journal Entry
     const billJe = await createJE(billDate, getJnlId('PJ'), billNum, [
-      { accountId: getAccId('501000'), debit: subtotal, credit: 0, description: `Purchase ${billNum}` },
-      { accountId: getAccId('202001'), debit: taxAmount, credit: 0, description: `Input GST ${billNum}` },
-      { accountId: getAccId('201000'), debit: 0, credit: totalAmount, description: `Vendor Payable ${vendor.name}` }
+      { accountId: getAccId('501000'), debit: subtotal, credit: 0, description: \\\Purchase \\\\\\ },
+      { accountId: getAccId('202001'), debit: taxAmount, credit: 0, description: \\\Input GST \\\\\\ },
+      { accountId: getAccId('201000'), debit: 0, credit: totalAmount, description: \\\Vendor Payable \\\\\\ }
     ]);
     await prisma.vendorBill.update({ where: { id: bill.id }, data: { journalEntryId: billJe.id } });
 
     // Create Payment
-    const payNum = generateUnique('DEMO-PAY-V', i);
-    const payDate = new Date(billDate.getTime() + 86400000 * 5);
+    const payNum = generateUnique('DEMO-PAY-V', i + 1);
+    const payDate = new Date(billDate.getTime() + 86400000 * 5); // 5 days later
     const payment = await prisma.payment.create({
       data: {
         number: payNum,
@@ -291,27 +320,28 @@ async function main() {
         vendorBillId: bill.id,
         status: 'POSTED',
         createdById: adminId,
-        reference: `Pay for ${billNum}`
+        reference: \\\Pay for \\\\\\
       }
     });
 
+    // Payment Journal Entry
     const payJe = await createJE(payDate, getJnlId('BNK'), payNum, [
-      { accountId: getAccId('201000'), debit: totalAmount, credit: 0, description: `Payment to ${vendor.name}` },
-      { accountId: getAccId('102000'), debit: 0, credit: totalAmount, description: `Bank Payment ${payNum}` }
+      { accountId: getAccId('201000'), debit: totalAmount, credit: 0, description: \\\Payment to \\\\\\ },
+      { accountId: getAccId('102000'), debit: 0, credit: totalAmount, description: \\\Bank Payment \\\\\\ }
     ]);
     await prisma.payment.update({ where: { id: payment.id }, data: { journalEntryId: payJe.id } });
   }
 
-  // 6. Sales Orders -> Invoices -> Payments -> JEs (200)
-  console.log('Generating 200 Sales Orders, 200 Customer Invoices, 200 Payments, 400 JEs...');
-  for (let i = 1; i <= 200; i++) {
-    const number = generateUnique('DEMO-SO', i);
+  // 8. Sales Orders (30) -> Invoices -> Payments -> JE
+  console.log('?? Seeding Sales Orders, Invoices, Payments and Journals...');
+  for (let i = 0; i < 30; i++) {
+    const number = generateUnique('DEMO-SO', i + 1);
     const existing = await prisma.salesOrder.findUnique({ where: { number } });
     if (existing) continue;
 
     const cust = randomElement(createdCustomers);
     const date = randomDate(1, 10);
-    const itemsCount = randomInt(1, 4);
+    const itemsCount = randomInt(1, 5);
     
     let subtotal = 0;
     let taxAmount = 0;
@@ -319,7 +349,7 @@ async function main() {
     for (let j = 0; j < itemsCount; j++) {
       const prod = randomElement(createdProducts);
       const qty = randomInt(2, 10);
-      const unitPrice = parseFloat(prod.salesPrice as any);
+      const unitPrice = parseFloat(prod.salesPrice);
       const lineSub = qty * unitPrice;
       const lineTax = lineSub * 0.18;
       subtotal += lineSub;
@@ -351,8 +381,9 @@ async function main() {
       }
     });
 
-    const invNum = generateUnique('DEMO-INV', i);
-    const invDate = new Date(date.getTime() + 86400000 * 3);
+    // Create Invoice
+    const invNum = generateUnique('DEMO-INV', i + 1);
+    const invDate = new Date(date.getTime() + 86400000 * 3); // 3 days later
     const inv = await prisma.invoice.create({
       data: {
         number: invNum,
@@ -371,15 +402,17 @@ async function main() {
       }
     });
 
+    // Invoice Journal Entry
     const invJe = await createJE(invDate, getJnlId('SJ'), invNum, [
-      { accountId: getAccId('103000'), debit: totalAmount, credit: 0, description: `Receivable from ${cust.name}` },
-      { accountId: getAccId('401000'), debit: 0, credit: subtotal, description: `Sales Revenue ${invNum}` },
-      { accountId: getAccId('202000'), debit: 0, credit: taxAmount, description: `Output GST ${invNum}` }
+      { accountId: getAccId('103000'), debit: totalAmount, credit: 0, description: \\\Receivable from \\\\\\ },
+      { accountId: getAccId('401000'), debit: 0, credit: subtotal, description: \\\Sales Revenue \\\\\\ },
+      { accountId: getAccId('202000'), debit: 0, credit: taxAmount, description: \\\Output GST \\\\\\ }
     ]);
     await prisma.invoice.update({ where: { id: inv.id }, data: { journalEntryId: invJe.id } });
 
-    const payNum = generateUnique('DEMO-PAY-C', i);
-    const payDate = new Date(invDate.getTime() + 86400000 * 7);
+    // Create Payment
+    const payNum = generateUnique('DEMO-PAY-C', i + 1);
+    const payDate = new Date(invDate.getTime() + 86400000 * 7); // 7 days later
     const payment = await prisma.payment.create({
       data: {
         number: payNum,
@@ -390,62 +423,50 @@ async function main() {
         invoiceId: inv.id,
         status: 'POSTED',
         createdById: adminId,
-        reference: `Recpt for ${invNum}`
+        reference: \\\Recpt for \\\\\\
       }
     });
 
+    // Payment Journal Entry
     const payJe = await createJE(payDate, getJnlId('BNK'), payNum, [
-      { accountId: getAccId('102000'), debit: totalAmount, credit: 0, description: `Bank Receipt ${payNum}` },
-      { accountId: getAccId('103000'), debit: 0, credit: totalAmount, description: `Receipt from ${cust.name}` }
+      { accountId: getAccId('102000'), debit: totalAmount, credit: 0, description: \\\Bank Receipt \\\\\\ },
+      { accountId: getAccId('103000'), debit: 0, credit: totalAmount, description: \\\Receipt from \\\\\\ }
     ]);
     await prisma.payment.update({ where: { id: payment.id }, data: { journalEntryId: payJe.id } });
   }
   
-  // 7. Budgets (12 - Monthly for realistic representation)
-  console.log('Generating 12 Monthly Budgets...');
-  let defaultAnalytic = await prisma.analyticAccount.findFirst();
-  if (!defaultAnalytic) {
-    defaultAnalytic = await prisma.analyticAccount.create({
-      data: { code: 'ANA-DEMO', name: 'Demo Analytic Account', responsible: 'Admin' }
-    });
-  }
-
-  for (let i = 1; i <= 12; i++) {
-    const code = `DEMO-BUDGET-${i}`;
-    const start = new Date();
-    start.setMonth(start.getMonth() - (12 - i));
-    start.setDate(1);
-    const end = new Date(start);
-    end.setMonth(end.getMonth() + 1);
-    end.setDate(0); // Last day of month
-    
+  // 9. Budgets (5)
+  for (let i = 0; i < 5; i++) {
+    const id = \\\DEMO-BUDGET-\\\\\\;
     await prisma.budget.upsert({
-      where: { id: code },
+      where: { id },
       update: {},
       create: {
-        id: code,
-        name: `Demo Budget M${i}`,
-        period: `Month ${i}`,
-        periodStart: start,
-        periodEnd: end,
+        id,
+        name: \\\Demo Budget Q\\\\\\,
+        period: \\\Quarter \\\\\\,
+        periodStart: new Date(),
+        periodEnd: new Date(Date.now() + 86400000 * 90),
         responsible: 'Admin',
-        analyticAccountId: defaultAnalytic.id,
-        plannedAmount: 1000000,
-        achievedAmount: randomInt(600000, 1100000),
-        remainingAmount: 0,
-        utilization: randomInt(60, 110)
+        plannedAmount: 500000,
+        achievedAmount: 200000,
+        remainingAmount: 300000,
+        utilization: 40
       }
     });
   }
 
-  console.log('✅ Urban Furniture ERP Database Massive Demo Seed Completed Successfully!');
+  console.log('? Urban Furniture ERP Database Demo Seed Completed Successfully!');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seeding failed:', e);
+    console.error('? Seeding failed:', e);
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await prisma.();
   });
+
+fs.writeFileSync('backend/prisma/seed.ts', seedContent);
+console.log('Seed file written to backend/prisma/seed.ts');

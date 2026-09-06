@@ -12,14 +12,21 @@ export const Header = ({ onOpenMobile }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const user = useStore((state) => state.user);
-  const setUser = useStore((state) => state.setUser);
+  const switchRoleAccount = useStore((state) => state.switchRoleAccount);
   const navigate = useNavigate();
 
   const handleRoleChange = (role) => {
-    setUser({ ...user, role });
+    switchRoleAccount(role);
+    setIsProfileOpen(false);
   };
 
   const handleLogout = () => {
+    useStore.getState().setUser({
+      name: 'Admin User',
+      email: 'admin@urbanfurniture.in',
+      role: 'Administrator',
+      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+    });
     navigate('/login');
   };
 
@@ -116,22 +123,29 @@ export const Header = ({ onOpenMobile }) => {
                   </div>
 
                   {/* Demo Role Switcher for Hackathon Judges */}
-                  <div className="p-2 bg-gray-50/80">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1 px-1">
-                      Demo Role Switcher
+                  <div className="p-2 bg-purple-50/70 border-t border-purple-100">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-purple-900 mb-1 px-1">
+                      Active User Accounts
                     </p>
-                    <div className="grid grid-cols-3 gap-1">
-                      {['Admin', 'Accountant', 'Contact'].map((r) => (
+                    <div className="flex flex-col gap-1">
+                      {[
+                        { label: 'Administrator', role: 'Administrator', email: 'admin@urbanfurniture.in' },
+                        { label: 'Accountant', role: 'Accountant', email: 'accountant@urbanfurniture.in' },
+                        { label: 'Sales & Purchase User', role: 'Sales & Purchase User', email: 'sales@urbanfurniture.in' }
+                      ].map((acc) => (
                         <button
-                          key={r}
-                          onClick={() => handleRoleChange(r)}
-                          className={`text-[10px] py-1 px-1.5 rounded font-medium text-center border ${
-                            user.role === r
-                              ? 'bg-purple-900 text-white border-purple-900'
-                              : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100'
+                          key={acc.role}
+                          onClick={() => handleRoleChange(acc.role)}
+                          className={`text-[11px] py-1.5 px-2 rounded-md font-medium text-left flex items-center justify-between border transition-all ${
+                            user.role === acc.role
+                              ? 'bg-purple-900 text-white border-purple-900 shadow-xs'
+                              : 'bg-white text-gray-700 border-gray-200 hover:bg-purple-100/60'
                           }`}
                         >
-                          {r}
+                          <span className="truncate">{acc.label}</span>
+                          <span className={`text-[9px] px-1 rounded ${user.role === acc.role ? 'bg-purple-800 text-teal-300' : 'text-gray-400'}`}>
+                            {user.role === acc.role ? 'Active' : 'Switch'}
+                          </span>
                         </button>
                       ))}
                     </div>

@@ -160,3 +160,67 @@ export async function cancelSalesOrder(req: Request, res: Response) {
 
   return sendSuccess(res, updated, 'Sales order cancelled.');
 }
+
+export async function createInvoiceFromOrder(req: AuthenticatedRequest, res: Response) {
+  const id = String(req.params.id);
+  const userId = req.user!.userId;
+
+  const order = await prisma.salesOrder.findUnique({
+    where: { id },
+    include: {
+      items: true,
+      invoices: true,
+    }
+  });
+
+  if (!order) {
+    return sendError(res, 'Sales order not found', 'NOT_FOUND', 404);
+  }
+
+  if (order.invoices && order.invoices.length > 0) {
+    return sendError(res, 'Invoice already exists for this Sales Order.', 'DUPLICATE_INVOICE', 400);
+  }
+
+  // Create Invoice inside a transaction
+  const invoice = await prisma.$transaction(async (tx) => {
+    const count = await tx.invoice.count();
+    const number = formatDocumentNumber('INV', count);
+
+    const newInvoice = await tx.invoice.create({
+      data: {
+        number,
+        customerId: order.customerId,
+        salesOrderId: order.id,
+        invoiceDate: new Date(),
+        dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000), // +15 days
+        status: 'DRAFT',
+        subtotal: order.subtotal,
+        taxAmount: order.taxAmount,
+        totalAmount: order.totalAmount,
+        paidAmount: 0,
+        remainingAmount: order.totalAmount,
+        createdById: userId,
+        items: {
+          create: order.items.map(item => ({
+            productId: item.productId,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            taxRate: item.taxRate,
+            taxAmount: item.taxAmount,
+            lineSubtotal: item.lineSubtotal,
+            lineTotal: item.lineTotal,
+          }))
+        }
+      },
+      include: {
+        items: true,
+        customer: true,
+      }
+    });
+
+    return newInvoice;
+  });
+
+  return sendSuccess(res, invoice, 'Invoice created successfully from Sales Order.', 201);
+}

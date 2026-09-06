@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
-import { Bell, AlertTriangle, CheckCircle, Info, X, Check } from 'lucide-react';
+import { Bell, AlertTriangle, CheckCircle, Info } from 'lucide-react';
 
 export const NotificationDropdown = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const notifications = useStore((state) => state.notifications);
-  const markRead = useStore((state) => state.markNotificationRead);
-  const clearAll = useStore((state) => state.clearAllNotifications);
+  const rawNotifications = useStore((state) => state.notifications);
+  const markRead = useStore((state) => state.markNotificationRead) || (() => {});
+  const clearAll = useStore((state) => state.clearAllNotifications) || (() => {});
   const navigate = useNavigate();
 
+  const notifications = Array.isArray(rawNotifications) ? rawNotifications : [];
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleNotificationClick = (n) => {

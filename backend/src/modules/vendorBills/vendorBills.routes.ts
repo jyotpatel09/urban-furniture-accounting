@@ -15,7 +15,7 @@ router.use(requireAuth);
 
 router.get('/', getVendorBills);
 router.get('/:id', getVendorBillById);
-router.post('/', requireRole('ADMIN', 'ACCOUNTANT'), validateBody(createVendorBillSchema), createVendorBill);
+router.post('/', requireRole('ADMIN', 'ACCOUNTANT', 'SALES_PURCHASE'), validateBody(createVendorBillSchema), createVendorBill);
 router.post('/:id/post', requireRole('ADMIN', 'ACCOUNTANT'), postVendorBill);
 
 export default router;

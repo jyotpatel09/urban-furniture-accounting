@@ -170,3 +170,68 @@ export async function receivePurchaseOrder(req: Request, res: Response) {
 
   return sendSuccess(res, result, 'Goods received and inventory updated.');
 }
+
+export async function createBillFromOrder(req: AuthenticatedRequest, res: Response) {
+  const id = String(req.params.id);
+  const userId = req.user!.userId;
+
+  const order = await prisma.purchaseOrder.findUnique({
+    where: { id },
+    include: {
+      items: true,
+      vendorBills: true,
+    }
+  });
+
+  if (!order) {
+    return sendError(res, 'Purchase order not found', 'NOT_FOUND', 404);
+  }
+
+  if (order.vendorBills && order.vendorBills.length > 0) {
+    return sendError(res, 'Vendor bill already exists for this Purchase Order.', 'DUPLICATE_BILL', 400);
+  }
+
+  // Create Vendor Bill inside a transaction
+  const bill = await prisma.$transaction(async (tx) => {
+    const count = await tx.vendorBill.count();
+    const number = formatDocumentNumber('BILL', count);
+
+    const newBill = await tx.vendorBill.create({
+      data: {
+        number,
+        vendorId: order.vendorId,
+        purchaseOrderId: order.id,
+        billDate: new Date(),
+        dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000), // +15 days
+        status: 'DRAFT',
+        subtotal: order.subtotal,
+        taxAmount: order.taxAmount,
+        totalAmount: order.totalAmount,
+        paidAmount: 0,
+        remainingAmount: order.totalAmount,
+        createdById: userId,
+        items: {
+          create: order.items.map(item => ({
+            productId: item.productId,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            taxRate: item.taxRate,
+            taxAmount: item.taxAmount,
+            lineSubtotal: item.lineSubtotal,
+            lineTotal: item.lineTotal,
+          }))
+        }
+      },
+      include: {
+        items: true,
+        vendor: true,
+      }
+    });
+
+    return newBill;
+  });
+
+  return sendSuccess(res, bill, 'Vendor Bill created successfully from Purchase Order.', 201);
+}
+

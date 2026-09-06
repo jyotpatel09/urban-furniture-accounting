@@ -1,29 +1,63 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
+import { purchaseService } from '../../services';
 import { PageHeader, Card, StatusBadge, Button, Timeline } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
-import { ArrowLeft, FileText, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, FileText } from 'lucide-react';
 
 export const PurchaseOrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-
-  const po = useStore((state) => state.purchaseOrders.find((p) => p.id === id)) || useStore((state) => state.purchaseOrders[0]);
   const createVendorBillFromPO = useStore((state) => state.createVendorBillFromPO);
 
+  const [po, setPo] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    setError('');
+    purchaseService.getOrderById(id)
+      .then(data => setPo(data))
+      .catch(err => {
+        console.error('Failed to load purchase order:', err);
+        setError(err.message || 'Failed to load purchase order.');
+      })
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Loading purchase order...</div>;
+  if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
   if (!po) return <div className="p-8 text-center text-gray-500">Purchase Order not found.</div>;
 
+  const vendorName = po.vendor?.name || po.vendorName || '—';
+  const orderDate = po.date ? new Date(po.date).toLocaleDateString('en-IN') : '—';
+  const subtotal = Number(po.subtotal || 0);
+  const taxAmount = Number(po.taxAmount || po.tax || 0);
+  const totalAmount = Number(po.totalAmount || po.total || 0);
+  const items = Array.isArray(po.items) ? po.items : [];
+  const vendorBills = Array.isArray(po.vendorBills) ? po.vendorBills : [];
+  const hasBill = vendorBills.length > 0;
+  const firstBill = vendorBills[0];
+
   const steps = [
-    { label: 'PO Created', completed: true, date: po.date },
-    { label: 'Goods Received', completed: po.status === 'Received' || po.status === 'Billed', date: po.date },
-    { label: 'Vendor Bill Created', completed: !!po.billId, active: !po.billId, date: po.billId ? 'Created' : 'Pending' },
-    { label: 'Payment Made', completed: po.billStatus === 'Billed', date: po.billStatus }
+    { label: 'PO Created', completed: true, date: orderDate },
+    { label: 'Confirmed', completed: po.status === 'CONFIRMED' || po.status === 'RECEIVED' || po.status === 'BILLED', date: orderDate },
+    { label: 'Goods Received', completed: po.status === 'RECEIVED' || po.status === 'BILLED', date: po.status === 'RECEIVED' || po.status === 'BILLED' ? 'Received' : 'Pending' },
+    { label: 'Vendor Bill Created', completed: hasBill, active: !hasBill, date: hasBill ? 'Created' : 'Pending' },
+    { label: 'Payment Made', completed: false, date: 'Pending' }
   ];
 
-  const handleCreateBill = () => {
-    createVendorBillFromPO(po.id);
-    navigate('/purchase/bills');
+  const handleCreateBill = async () => {
+    try {
+      await createVendorBillFromPO(po.id);
+      navigate('/purchase/bills');
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Failed to create vendor bill.');
+    }
   };
 
   return (
@@ -31,22 +65,22 @@ export const PurchaseOrderDetailPage = () => {
       <WorkflowBanner activeStep="transactions" />
 
       <PageHeader
-        title={`Purchase Order ${po.id}`}
-        subtitle={`Vendor: ${po.vendor} • Date: ${po.date}`}
-        breadcrumbs={['Dashboard', 'Purchase Orders', po.id]}
+        title={`Purchase Order ${po.number || po.id}`}
+        subtitle={`Vendor: ${vendorName} • Date: ${orderDate}`}
+        breadcrumbs={['Dashboard', 'Purchase Orders', po.number || po.id]}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate('/purchase/orders')}>
               Back to POs
             </Button>
-            {!po.billId && (
+            {!hasBill && po.status !== 'CANCELLED' && (
               <Button variant="teal" icon={FileText} onClick={handleCreateBill}>
                 Create Vendor Bill
               </Button>
             )}
-            {po.billId && (
-              <Button variant="primary" icon={FileText} onClick={() => navigate(`/purchase/bills/${po.billId}`)}>
-                View Linked Bill ({po.billId})
+            {hasBill && firstBill && (
+              <Button variant="primary" icon={FileText} onClick={() => navigate(`/purchase/bills/${firstBill.id}`)}>
+                View Linked Bill ({firstBill.number || firstBill.id})
               </Button>
             )}
           </div>
@@ -72,13 +106,19 @@ export const PurchaseOrderDetailPage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {po.items?.map((item, idx) => (
-                  <tr key={idx}>
-                    <td className="py-3.5 px-4 font-semibold text-gray-900">{item.productName}</td>
-                    <td className="py-3.5 px-4 font-bold text-gray-800">{item.qty}</td>
-                    <td className="py-3.5 px-4 text-gray-700">₹{item.unitPrice.toLocaleString('en-IN')}</td>
-                    <td className="py-3.5 px-4 text-gray-600">{item.taxRate}%</td>
-                    <td className="py-3.5 px-4 font-bold text-amber-900">₹{item.subtotal.toLocaleString('en-IN')}</td>
+                {items.length === 0 ? (
+                  <tr><td colSpan={5} className="py-6 text-center text-gray-400 text-xs">No items found.</td></tr>
+                ) : items.map((item, idx) => (
+                  <tr key={item.id || idx}>
+                    <td className="py-3.5 px-4 font-semibold text-gray-900">
+                      {item.product?.name || item.productName || '—'}
+                    </td>
+                    <td className="py-3.5 px-4 font-bold text-gray-800">{item.quantity || item.qty || 0}</td>
+                    <td className="py-3.5 px-4 text-gray-700">₹{Number(item.unitPrice || 0).toLocaleString('en-IN')}</td>
+                    <td className="py-3.5 px-4 text-gray-600">{item.taxRate || 0}%</td>
+                    <td className="py-3.5 px-4 font-bold text-amber-900">
+                      ₹{Number(item.lineSubtotal || item.subtotal || 0).toLocaleString('en-IN')}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -88,15 +128,15 @@ export const PurchaseOrderDetailPage = () => {
           <div className="border-t border-gray-200 pt-4 mt-4 flex flex-col items-end space-y-2 text-sm">
             <div className="flex justify-between w-64 text-gray-600">
               <span>Untaxed Amount:</span>
-              <span className="font-semibold text-gray-900">₹{po.subtotal.toLocaleString('en-IN')}</span>
+              <span className="font-semibold text-gray-900">₹{subtotal.toLocaleString('en-IN')}</span>
             </div>
             <div className="flex justify-between w-64 text-gray-600">
               <span>GST Input Tax:</span>
-              <span className="font-semibold text-gray-900">₹{po.tax.toLocaleString('en-IN')}</span>
+              <span className="font-semibold text-gray-900">₹{taxAmount.toLocaleString('en-IN')}</span>
             </div>
             <div className="flex justify-between w-64 text-base font-bold text-amber-900 pt-2 border-t border-gray-200">
               <span>Total Cost:</span>
-              <span>₹{po.total.toLocaleString('en-IN')}</span>
+              <span>₹{totalAmount.toLocaleString('en-IN')}</span>
             </div>
           </div>
         </Card>
@@ -105,16 +145,28 @@ export const PurchaseOrderDetailPage = () => {
           <div className="space-y-4 text-xs">
             <div>
               <span className="text-gray-400 block font-medium">Vendor Name</span>
-              <span className="text-sm font-bold text-gray-900">{po.vendor}</span>
+              <span className="text-sm font-bold text-gray-900">{vendorName}</span>
             </div>
+            {po.vendor?.email && (
+              <div>
+                <span className="text-gray-400 block font-medium">Email</span>
+                <span className="text-sm text-gray-700">{po.vendor.email}</span>
+              </div>
+            )}
             <div>
               <span className="text-gray-400 block font-medium">PO Status</span>
               <div className="mt-1"><StatusBadge status={po.status} /></div>
             </div>
             <div>
-              <span className="text-gray-400 block font-medium">Billing Status</span>
-              <div className="mt-1"><StatusBadge status={po.billStatus} /></div>
+              <span className="text-gray-400 block font-medium">PO Number</span>
+              <span className="font-mono text-sm font-bold text-gray-900">{po.number || po.id}</span>
             </div>
+            {po.notes && (
+              <div>
+                <span className="text-gray-400 block font-medium">Notes</span>
+                <span className="text-gray-700">{po.notes}</span>
+              </div>
+            )}
           </div>
         </Card>
       </div>

@@ -1,403 +1,404 @@
 import { create } from 'zustand';
 import {
-  initialContacts,
-  initialProducts,
-  initialChartOfAccounts,
-  initialJournals,
-  initialTaxes,
-  initialAnalyticAccounts,
-  initialSalesOrders,
-  initialCustomerInvoices,
-  initialPurchaseOrders,
-  initialVendorBills,
-  initialJournalEntries,
-  initialBudgets,
-  initialUsers,
-  initialRoles,
-  initialNotifications
-} from '../data/mockData';
+  authService,
+  contactsService,
+  productsService,
+  salesService,
+  purchaseService,
+  accountingService,
+  budgetService,
+  dashboardService,
+  reportsService
+} from '../services';
 
-const loadLocal = (key, fallback) => {
+const initialUser = (() => {
   try {
-    const saved = localStorage.getItem(`uf_acc_${key}`);
-    return saved ? JSON.parse(saved) : fallback;
+    const saved = localStorage.getItem('uf_user_session');
+    return saved ? JSON.parse(saved) : {
+      name: 'Admin User',
+      email: 'admin@urbanfurniture.in',
+      role: 'ADMIN',
+      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+    };
   } catch {
-    return fallback;
+    return {
+      name: 'Admin User',
+      email: 'admin@urbanfurniture.in',
+      role: 'ADMIN',
+      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+    };
   }
-};
-
-const saveLocal = (key, val) => {
-  try {
-    localStorage.setItem(`uf_acc_${key}`, JSON.stringify(val));
-  } catch (e) {
-    console.error('Failed to save to localStorage:', e);
-  }
-};
+})();
 
 export const useStore = create((set, get) => ({
-  // Authentication state
-  user: loadLocal('user', {
-    name: 'Admin User',
-    email: 'admin@urbanfurniture.in',
-    role: 'Admin',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
-  }),
+  // Authentication & Role Session State
+  user: initialUser,
+  loading: false,
+  error: null,
+
+  activeAccounts: {
+    'Administrator': {
+      name: 'Admin User',
+      email: 'admin@urbanfurniture.in',
+      role: 'ADMIN',
+      roleKey: 'Administrator',
+      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+    },
+    'Accountant': {
+      name: 'Accountant User',
+      email: 'accountant@urbanfurniture.in',
+      role: 'ACCOUNTANT',
+      roleKey: 'Accountant',
+      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+    },
+    'Sales & Purchase User': {
+      name: 'Sales & Purchase User',
+      email: 'sales@urbanfurniture.in',
+      role: 'SALES_PURCHASE',
+      roleKey: 'Sales & Purchase User',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+    }
+  },
+
   setUser: (user) => {
-    saveLocal('user', user);
+    try {
+      localStorage.setItem('uf_user_session', JSON.stringify(user));
+    } catch (e) {
+      console.error(e);
+    }
     set({ user });
   },
 
-  // Master Data
-  contacts: loadLocal('contacts', initialContacts),
-  addContact: (contact) => set((state) => {
-    const newContact = {
-      ...contact,
-      id: contact.type === 'Vendor' ? `VEND-00${state.contacts.length + 1}` : `CUST-00${state.contacts.length + 1}`,
-      status: 'Active',
-      totalSales: 0,
-      paidSales: 0,
-      unpaidSales: 0,
-      outstanding: 0,
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
-    };
-    const updated = [newContact, ...state.contacts];
-    saveLocal('contacts', updated);
-    return { contacts: updated };
-  }),
-  updateContact: (id, contactData) => set((state) => {
-    const updated = state.contacts.map((c) => c.id === id ? { ...c, ...contactData } : c);
-    saveLocal('contacts', updated);
-    return { contacts: updated };
-  }),
-  deleteContact: (id) => set((state) => {
-    const updated = state.contacts.filter((c) => c.id !== id);
-    saveLocal('contacts', updated);
-    return { contacts: updated };
-  }),
+  switchRoleAccount: async (roleKeyOrEmail) => {
+    let email = 'admin@urbanfurniture.in';
+    let roleName = 'Administrator';
+    let roleEnum = 'ADMIN';
+    let avatar = 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80';
 
-  products: loadLocal('products', initialProducts),
-  addProduct: (prod) => set((state) => {
-    const newProd = {
-      ...prod,
-      id: `PROD-00${state.products.length + 1}`,
-      status: 'Active',
-      salesCount: 0,
-      purchaseCount: 0,
-    };
-    const updated = [newProd, ...state.products];
-    saveLocal('products', updated);
-    return { products: updated };
-  }),
-  updateProduct: (id, prodData) => set((state) => {
-    const updated = state.products.map((p) => p.id === id ? { ...p, ...prodData } : p);
-    saveLocal('products', updated);
-    return { products: updated };
-  }),
+    if (roleKeyOrEmail === 'Accountant' || roleKeyOrEmail === 'accountant@urbanfurniture.in') {
+      email = 'accountant@urbanfurniture.in';
+      roleName = 'Accountant';
+      roleEnum = 'ACCOUNTANT';
+      avatar = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80';
+    } else if (roleKeyOrEmail === 'Sales & Purchase User' || roleKeyOrEmail === 'sales@urbanfurniture.in' || roleKeyOrEmail === 'Sales') {
+      email = 'sales@urbanfurniture.in';
+      roleName = 'Sales & Purchase User';
+      roleEnum = 'SALES_PURCHASE';
+      avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
+    }
 
-  chartOfAccounts: loadLocal('chartOfAccounts', initialChartOfAccounts),
-  journals: loadLocal('journals', initialJournals),
-  taxes: loadLocal('taxes', initialTaxes),
-  analyticAccounts: loadLocal('analyticAccounts', initialAnalyticAccounts),
+    try {
+      const res = await authService.login(email, 'Password@123');
+      const newUser = {
+        id: res.user?.id,
+        name: res.user?.name || roleName,
+        email: res.user?.email || email,
+        role: roleName,
+        roleEnum: res.user?.role || roleEnum,
+        avatar
+      };
+      get().setUser(newUser);
+      return newUser;
+    } catch (err) {
+      console.warn('Backend login fallback during role switch:', err);
+      const fallbackUser = {
+        name: roleName,
+        email,
+        role: roleName,
+        roleEnum,
+        avatar
+      };
+      get().setUser(fallbackUser);
+      return fallbackUser;
+    }
+  },
 
-  // Sales Module
-  salesOrders: loadLocal('salesOrders', initialSalesOrders),
-  addSalesOrder: (so) => set((state) => {
-    const newSO = {
-      ...so,
-      id: `SO-00${124 + state.salesOrders.length}`,
-      date: new Date().toISOString().split('T')[0],
-      status: 'Confirmed',
-      paymentStatus: 'Unpaid',
-      invoiceId: null
-    };
-    const updated = [newSO, ...state.salesOrders];
-    saveLocal('salesOrders', updated);
-    return { salesOrders: updated };
-  }),
-  
-  createInvoiceFromSO: (soId) => set((state) => {
-    const so = state.salesOrders.find((s) => s.id === soId);
-    if (!so) return state;
+  // Dynamic ERP Business Data (PostgreSQL-backed, no localStorage persistence)
+  contacts: [],
+  products: [],
+  chartOfAccounts: [],
+  journals: [],
+  taxes: [],
+  analyticAccounts: [],
+  salesOrders: [],
+  customerInvoices: [],
+  purchaseOrders: [],
+  vendorBills: [],
+  journalEntries: [],
+  budgets: [],
+  dashboardSummary: null,
 
-    const invId = `INV-00${124 + state.customerInvoices.length}`;
-    const newInvoice = {
-      id: invId,
-      soId: so.id,
-      customer: so.customer,
-      customerId: so.customerId,
-      date: new Date().toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      amount: so.total,
-      paid: 0,
-      remaining: so.total,
-      status: 'Posted',
-      journalEntryId: `JE-00${45 + state.journalEntries.length}`,
-      items: so.items.map(item => ({
-        productName: item.productName,
-        qty: item.qty,
-        unitPrice: item.unitPrice,
-        taxRate: item.taxRate,
-        total: item.subtotal * (1 + item.taxRate / 100)
-      })),
-      payments: []
-    };
+  // Notifications State & Handlers
+  notifications: [
+    {
+      id: 'notif-1',
+      title: 'Customer Payment Received',
+      message: '₹29,500 received from Nimesh Pathak (INV-00124)',
+      time: '10m ago',
+      type: 'success',
+      read: false,
+    },
+    {
+      id: 'notif-2',
+      title: 'Sales Order Confirmed',
+      message: 'SO-00125 confirmed for Rajesh Shah (₹1,12,100)',
+      time: '1h ago',
+      type: 'info',
+      read: false,
+    },
+    {
+      id: 'notif-3',
+      title: 'Vendor Bill Posted',
+      message: 'BILL-00231 posted from Azure Furniture (₹75,520)',
+      time: '3h ago',
+      type: 'warning',
+      read: true,
+    }
+  ],
 
-    // Update SO status
-    const updatedSOs = state.salesOrders.map(s => s.id === soId ? { ...s, status: 'Invoiced', invoiceId: invId } : s);
-    const updatedInvoices = [newInvoice, ...state.customerInvoices];
+  markNotificationRead: (id) => set((state) => ({
+    notifications: (state.notifications || []).map(n => n.id === id ? { ...n, read: true } : n)
+  })),
 
-    // Create automatically balanced Journal Entry
-    const newJE = {
-      id: newInvoice.journalEntryId,
-      date: newInvoice.date,
-      journal: 'Sales Journal',
-      reference: invId,
-      totalDebit: so.total,
-      totalCredit: so.total,
-      status: 'Posted',
-      items: [
-        { accountCode: '103000', accountName: `Debtors (${so.customer})`, debit: so.total, credit: 0 },
-        { accountCode: '401000', accountName: 'Sales Income Account', debit: 0, credit: so.subtotal },
-        { accountCode: '202000', accountName: `GST Payable (${so.tax > 0 ? '18%' : '0%'})`, debit: 0, credit: so.tax }
-      ]
-    };
-    const updatedJEs = [newJE, ...state.journalEntries];
+  clearAllNotifications: () => set(() => ({
+    notifications: []
+  })),
 
-    saveLocal('salesOrders', updatedSOs);
-    saveLocal('customerInvoices', updatedInvoices);
-    saveLocal('journalEntries', updatedJEs);
+  // Async API Fetchers & Mutators
+  fetchContacts: async () => {
+    try {
+      const data = await contactsService.getAll();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ contacts: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch contacts from API:', e);
+      return [];
+    }
+  },
+  addContact: async (contact) => {
+    const created = await contactsService.create(contact);
+    await get().fetchContacts();
+    return created;
+  },
+  updateContact: async (id, data) => {
+    const updated = await contactsService.update(id, data);
+    await get().fetchContacts();
+    return updated;
+  },
+  deleteContact: async (id) => {
+    await contactsService.delete(id);
+    await get().fetchContacts();
+  },
 
-    return {
-      salesOrders: updatedSOs,
-      customerInvoices: updatedInvoices,
-      journalEntries: updatedJEs
-    };
-  }),
+  fetchProducts: async () => {
+    try {
+      const data = await productsService.getAll();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ products: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch products from API:', e);
+      return [];
+    }
+  },
+  addProduct: async (product) => {
+    const created = await productsService.create(product);
+    await get().fetchProducts();
+    return created;
+  },
+  updateProduct: async (id, data) => {
+    const updated = await productsService.update(id, data);
+    await get().fetchProducts();
+    return updated;
+  },
 
-  customerInvoices: loadLocal('customerInvoices', initialCustomerInvoices),
-  registerCustomerPayment: (invoiceId, amount, method, ref) => set((state) => {
-    const inv = state.customerInvoices.find(i => i.id === invoiceId);
-    if (!inv) return state;
+  fetchChartOfAccounts: async () => {
+    try {
+      const data = await accountingService.getChartOfAccounts();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ chartOfAccounts: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch chart of accounts:', e);
+      return [];
+    }
+  },
+  addAccount: async (acc) => {
+    const created = await accountingService.createAccount(acc);
+    await get().fetchChartOfAccounts();
+    return created;
+  },
 
-    const paymentAmount = Number(amount);
-    const newPaid = inv.paid + paymentAmount;
-    const newRemaining = Math.max(0, inv.amount - newPaid);
-    const newStatus = newRemaining === 0 ? 'Paid' : 'Partially Paid';
+  fetchJournals: async () => {
+    try {
+      const data = await accountingService.getJournals();
+      const items = Array.isArray(data) ? data : [];
+      set({ journals: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch journals:', e);
+      return [];
+    }
+  },
+  addJournal: async (j) => {
+    const created = await accountingService.createJournal(j);
+    await get().fetchJournals();
+    return created;
+  },
 
-    const paymentRec = {
-      date: new Date().toISOString().split('T')[0],
-      ref: ref || `PAY-C-00${Date.now().toString().slice(-3)}`,
-      method: method || 'Bank HDFC',
-      amount: paymentAmount
-    };
+  fetchTaxes: async () => {
+    try {
+      const data = await accountingService.getTaxes();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ taxes: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch taxes:', e);
+      return [];
+    }
+  },
 
-    const updatedInvoices = state.customerInvoices.map(i => 
-      i.id === invoiceId 
-        ? { ...i, paid: newPaid, remaining: newRemaining, status: newStatus, payments: [...i.payments, paymentRec] } 
-        : i
-    );
+  fetchAnalyticAccounts: async () => {
+    try {
+      const data = await accountingService.getAnalyticAccounts();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ analyticAccounts: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch analytic accounts:', e);
+      return [];
+    }
+  },
 
-    // Update Sales order payment status if linked
-    const updatedSOs = state.salesOrders.map(s => 
-      s.invoiceId === invoiceId 
-        ? { ...s, paymentStatus: newStatus }
-        : s
-    );
+  fetchSalesOrders: async () => {
+    try {
+      const data = await salesService.getOrders();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ salesOrders: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch sales orders:', e);
+      return [];
+    }
+  },
+  addSalesOrder: async (so) => {
+    const created = await salesService.createOrder(so);
+    await get().fetchSalesOrders();
+    return created;
+  },
+  createInvoiceFromSO: async (soId) => {
+    const res = await salesService.createInvoiceFromOrder(soId);
+    await get().fetchSalesOrders();
+    await get().fetchCustomerInvoices();
+    await get().fetchJournalEntries();
+    return res;
+  },
 
-    // Create Payment Journal Entry (Cash/Bank Debit, Debtors Credit)
-    const newJE = {
-      id: `JE-00${45 + state.journalEntries.length}`,
-      date: new Date().toISOString().split('T')[0],
-      journal: method.includes('Cash') ? 'Cash Journal' : 'Bank Journal',
-      reference: paymentRec.ref,
-      totalDebit: paymentAmount,
-      totalCredit: paymentAmount,
-      status: 'Posted',
-      items: [
-        { accountCode: method.includes('Cash') ? '101000' : '102000', accountName: method.includes('Cash') ? 'Cash Account' : 'Bank - HDFC Account', debit: paymentAmount, credit: 0 },
-        { accountCode: '103000', accountName: `Debtors (${inv.customer})`, debit: 0, credit: paymentAmount }
-      ]
-    };
+  fetchCustomerInvoices: async () => {
+    try {
+      const data = await salesService.getInvoices();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ customerInvoices: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch invoices:', e);
+      return [];
+    }
+  },
+  registerCustomerPayment: async (invoiceId, amount, method, ref) => {
+    const res = await salesService.registerPayment({ invoiceId, amount: Number(amount), method: method.includes('Cash') ? 'CASH' : 'BANK', reference: ref });
+    await get().fetchCustomerInvoices();
+    await get().fetchSalesOrders();
+    await get().fetchJournalEntries();
+    return res;
+  },
 
-    const updatedJEs = [newJE, ...state.journalEntries];
+  fetchPurchaseOrders: async () => {
+    try {
+      const data = await purchaseService.getOrders();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ purchaseOrders: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch purchase orders:', e);
+      return [];
+    }
+  },
+  addPurchaseOrder: async (po) => {
+    const created = await purchaseService.createOrder(po);
+    await get().fetchPurchaseOrders();
+    return created;
+  },
+  createVendorBillFromPO: async (poId) => {
+    const res = await purchaseService.createBillFromOrder(poId);
+    await get().fetchPurchaseOrders();
+    await get().fetchVendorBills();
+    await get().fetchJournalEntries();
+    return res;
+  },
 
-    saveLocal('customerInvoices', updatedInvoices);
-    saveLocal('salesOrders', updatedSOs);
-    saveLocal('journalEntries', updatedJEs);
+  fetchVendorBills: async () => {
+    try {
+      const data = await purchaseService.getBills();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ vendorBills: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch vendor bills:', e);
+      return [];
+    }
+  },
+  registerVendorPayment: async (billId, amount, method, ref) => {
+    const res = await purchaseService.registerPayment({ billId, amount: Number(amount), method: method.includes('Cash') ? 'CASH' : 'BANK', reference: ref });
+    await get().fetchVendorBills();
+    await get().fetchPurchaseOrders();
+    await get().fetchJournalEntries();
+    return res;
+  },
 
-    return {
-      customerInvoices: updatedInvoices,
-      salesOrders: updatedSOs,
-      journalEntries: updatedJEs
-    };
-  }),
+  fetchJournalEntries: async () => {
+    try {
+      const data = await accountingService.getJournalEntries();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ journalEntries: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch journal entries:', e);
+      return [];
+    }
+  },
+  addJournalEntry: async (entry) => {
+    const created = await accountingService.createJournalEntry(entry);
+    await get().fetchJournalEntries();
+    return created;
+  },
 
-  // Purchase Module
-  purchaseOrders: loadLocal('purchaseOrders', initialPurchaseOrders),
-  addPurchaseOrder: (po) => set((state) => {
-    const newPO = {
-      ...po,
-      id: `PO-00${231 + state.purchaseOrders.length}`,
-      date: new Date().toISOString().split('T')[0],
-      status: 'Confirmed',
-      billStatus: 'Not Billed',
-      billId: null
-    };
-    const updated = [newPO, ...state.purchaseOrders];
-    saveLocal('purchaseOrders', updated);
-    return { purchaseOrders: updated };
-  }),
+  fetchBudgets: async () => {
+    try {
+      const data = await budgetService.getBudgets();
+      const items = Array.isArray(data) ? data : data?.items || [];
+      set({ budgets: items });
+      return items;
+    } catch (e) {
+      console.error('Failed to fetch budgets:', e);
+      return [];
+    }
+  },
+  addBudget: async (b) => {
+    const created = await budgetService.createBudget(b);
+    await get().fetchBudgets();
+    return created;
+  },
 
-  createVendorBillFromPO: (poId) => set((state) => {
-    const po = state.purchaseOrders.find(p => p.id === poId);
-    if (!po) return state;
-
-    const billId = `BILL-00${231 + state.vendorBills.length}`;
-    const newBill = {
-      id: billId,
-      poId: po.id,
-      vendor: po.vendor,
-      vendorId: po.vendorId,
-      date: new Date().toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      amount: po.total,
-      paid: 0,
-      remaining: po.total,
-      status: 'Posted',
-      journalEntryId: `JE-00${45 + state.journalEntries.length}`,
-      items: po.items.map(item => ({
-        productName: item.productName,
-        qty: item.qty,
-        unitPrice: item.unitPrice,
-        taxRate: item.taxRate,
-        total: item.subtotal * (1 + item.taxRate / 100)
-      })),
-      payments: []
-    };
-
-    const updatedPOs = state.purchaseOrders.map(p => p.id === poId ? { ...p, status: 'Billed', billStatus: 'Billed', billId } : p);
-    const updatedBills = [newBill, ...state.vendorBills];
-
-    // Create Purchase Journal Entry
-    const newJE = {
-      id: newBill.journalEntryId,
-      date: newBill.date,
-      journal: 'Purchase Journal',
-      reference: billId,
-      totalDebit: po.total,
-      totalCredit: po.total,
-      status: 'Posted',
-      items: [
-        { accountCode: '501000', accountName: 'Purchase Expense Account', debit: po.subtotal, credit: 0 },
-        { accountCode: '202000', accountName: `GST Input Credit (${po.tax > 0 ? '18%' : '0%'})`, debit: po.tax, credit: 0 },
-        { accountCode: '201000', accountName: `Creditors (${po.vendor})`, debit: 0, credit: po.total }
-      ]
-    };
-
-    const updatedJEs = [newJE, ...state.journalEntries];
-
-    saveLocal('purchaseOrders', updatedPOs);
-    saveLocal('vendorBills', updatedBills);
-    saveLocal('journalEntries', updatedJEs);
-
-    return {
-      purchaseOrders: updatedPOs,
-      vendorBills: updatedBills,
-      journalEntries: updatedJEs
-    };
-  }),
-
-  vendorBills: loadLocal('vendorBills', initialVendorBills),
-  registerVendorPayment: (billId, amount, method, ref) => set((state) => {
-    const bill = state.vendorBills.find(b => b.id === billId);
-    if (!bill) return state;
-
-    const paymentAmount = Number(amount);
-    const newPaid = bill.paid + paymentAmount;
-    const newRemaining = Math.max(0, bill.amount - newPaid);
-    const newStatus = newRemaining === 0 ? 'Paid' : 'Partially Paid';
-
-    const paymentRec = {
-      date: new Date().toISOString().split('T')[0],
-      ref: ref || `PAY-V-00${Date.now().toString().slice(-3)}`,
-      method: method || 'Bank HDFC',
-      amount: paymentAmount
-    };
-
-    const updatedBills = state.vendorBills.map(b => 
-      b.id === billId 
-        ? { ...b, paid: newPaid, remaining: newRemaining, status: newStatus, payments: [...b.payments, paymentRec] } 
-        : b
-    );
-
-    // Create Payment Journal Entry (Creditors Debit, Cash/Bank Credit)
-    const newJE = {
-      id: `JE-00${45 + state.journalEntries.length}`,
-      date: new Date().toISOString().split('T')[0],
-      journal: method.includes('Cash') ? 'Cash Journal' : 'Bank Journal',
-      reference: paymentRec.ref,
-      totalDebit: paymentAmount,
-      totalCredit: paymentAmount,
-      status: 'Posted',
-      items: [
-        { accountCode: '201000', accountName: `Creditors (${bill.vendor})`, debit: paymentAmount, credit: 0 },
-        { accountCode: method.includes('Cash') ? '101000' : '102000', accountName: method.includes('Cash') ? 'Cash Account' : 'Bank - HDFC Account', debit: 0, credit: paymentAmount }
-      ]
-    };
-
-    const updatedJEs = [newJE, ...state.journalEntries];
-
-    saveLocal('vendorBills', updatedBills);
-    saveLocal('journalEntries', updatedJEs);
-
-    return {
-      vendorBills: updatedBills,
-      journalEntries: updatedJEs
-    };
-  }),
-
-  // Accounting Module
-  journalEntries: loadLocal('journalEntries', initialJournalEntries),
-  addJournalEntry: (entry) => set((state) => {
-    const newJE = {
-      ...entry,
-      id: `JE-00${45 + state.journalEntries.length}`,
-      date: new Date().toISOString().split('T')[0],
-      status: 'Posted'
-    };
-    const updated = [newJE, ...state.journalEntries];
-    saveLocal('journalEntries', updated);
-    return { journalEntries: updated };
-  }),
-
-  // Budgeting Module
-  budgets: loadLocal('budgets', initialBudgets),
-  addBudget: (budget) => set((state) => {
-    const newBudget = {
-      ...budget,
-      id: `BDG-00${state.budgets.length + 1}`,
-      actualAmount: 0,
-      remainingAmount: budget.plannedAmount,
-      utilization: 0,
-      status: 'In Progress'
-    };
-    const updated = [newBudget, ...state.budgets];
-    saveLocal('budgets', updated);
-    return { budgets: updated };
-  }),
-
-  // System Settings / Users / Notifications
-  users: loadLocal('users', initialUsers),
-  roles: loadLocal('roles', initialRoles),
-  notifications: loadLocal('notifications', initialNotifications),
-
-  markNotificationRead: (id) => set((state) => {
-    const updated = state.notifications.map(n => n.id === id ? { ...n, read: true } : n);
-    saveLocal('notifications', updated);
-    return { notifications: updated };
-  }),
-  clearAllNotifications: () => set(() => {
-    saveLocal('notifications', []);
-    return { notifications: [] };
-  })
+  fetchDashboardSummary: async () => {
+    try {
+      const data = await dashboardService.getSummary();
+      set({ dashboardSummary: data });
+      return data;
+    } catch (e) {
+      console.error('Failed to fetch dashboard summary:', e);
+      return null;
+    }
+  }
 }));

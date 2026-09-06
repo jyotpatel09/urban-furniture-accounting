@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { useStore } from '../../store/useStore';
 import { 
   LayoutDashboard, Database, ShoppingBag, ShoppingCart, 
   BookOpen, PieChart, BarChart3, Settings, ChevronDown, ChevronRight, 
@@ -9,6 +10,8 @@ import {
 
 export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile }) => {
   const location = useLocation();
+  const user = useStore((state) => state.user);
+  const currentRole = user?.role || 'Administrator';
 
   const [openSections, setOpenSections] = useState({
     master: true,
@@ -24,7 +27,7 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const navGroups = [
+  const rawNavGroups = [
     {
       title: 'Main',
       items: [
@@ -38,8 +41,8 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile
       items: [
         { label: 'Contacts', icon: Users, path: '/contacts' },
         { label: 'Products', icon: Package, path: '/products' },
-        { label: 'Chart of Accounts', icon: Layers, path: '/accounts' },
-        { label: 'Journals', icon: BookOpen, path: '/journals' },
+        { label: 'Chart of Accounts', icon: Layers, path: '/accounts', roles: ['Administrator', 'Admin', 'Accountant'] },
+        { label: 'Journals', icon: BookOpen, path: '/journals', roles: ['Administrator', 'Admin', 'Accountant'] },
       ]
     },
     {
@@ -47,7 +50,7 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile
       title: 'Sales',
       icon: ShoppingBag,
       items: [
-        { label: 'Sales Orders', icon: ShoppingBag, path: '/sales/orders' },
+        { label: 'Sales Orders', icon: ShoppingBag, path: '/sales/orders', roles: ['Administrator', 'Admin', 'Sales & Purchase User'] },
         { label: 'Customer Invoices', icon: FileText, path: '/sales/invoices' },
         { label: 'Payments', icon: CreditCard, path: '/sales/payments' },
       ]
@@ -57,7 +60,7 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile
       title: 'Purchase',
       icon: ShoppingCart,
       items: [
-        { label: 'Purchase Orders', icon: ShoppingCart, path: '/purchase/orders' },
+        { label: 'Purchase Orders', icon: ShoppingCart, path: '/purchase/orders', roles: ['Administrator', 'Admin', 'Sales & Purchase User'] },
         { label: 'Vendor Bills', icon: FileText, path: '/purchase/bills' },
         { label: 'Payments', icon: CreditCard, path: '/purchase/payments' },
       ]
@@ -66,6 +69,7 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile
       key: 'accounting',
       title: 'Accounting',
       icon: BookOpen,
+      roles: ['Administrator', 'Admin', 'Accountant'],
       items: [
         { label: 'Journal Entries', icon: BookOpen, path: '/accounting/journal-entries' },
         { label: 'General Ledger', icon: Layers, path: '/accounting/ledger' },
@@ -77,6 +81,7 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile
       key: 'budgeting',
       title: 'Budgeting',
       icon: PieChart,
+      roles: ['Administrator', 'Admin', 'Accountant'],
       items: [
         { label: 'Budgets', icon: PieChart, path: '/budgets' },
       ]
@@ -85,6 +90,7 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile
       key: 'reports',
       title: 'Reports',
       icon: BarChart3,
+      roles: ['Administrator', 'Admin', 'Accountant'],
       items: [
         { label: 'Balance Sheet', icon: BarChart3, path: '/reports/balance-sheet' },
         { label: 'Profit & Loss', icon: BarChart3, path: '/reports/profit-loss' },
@@ -95,6 +101,7 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile
       key: 'settings',
       title: 'Settings',
       icon: Settings,
+      roles: ['Administrator', 'Admin'],
       items: [
         { label: 'General', icon: Sliders, path: '/settings/general' },
         { label: 'Users', icon: Users, path: '/settings/users' },
@@ -102,6 +109,14 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, isMobileOpen, closeMobile
       ]
     }
   ];
+
+  // Role Filtering Logic
+  const navGroups = rawNavGroups.map(group => {
+    if (group.roles && !group.roles.includes(currentRole)) return null;
+    const allowedItems = group.items.filter(item => !item.roles || item.roles.includes(currentRole));
+    if (allowedItems.length === 0) return null;
+    return { ...group, items: allowedItems };
+  }).filter(Boolean);
 
   const sidebarContent = (
     <div className="h-full flex flex-col justify-between bg-[#1e1728] text-purple-100 select-none border-r border-purple-900/40">

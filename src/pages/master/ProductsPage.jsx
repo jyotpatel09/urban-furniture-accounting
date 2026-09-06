@@ -1,18 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { PageHeader, Card, Table, StatusBadge, Button, Modal, Input, Select } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
-import { Plus, Search, Package, Eye, Tag, DollarSign } from 'lucide-react';
+import { Plus, Search, Package, Eye } from 'lucide-react';
 
 export const ProductsPage = () => {
   const navigate = useNavigate();
   const products = useStore((state) => state.products);
+  const fetchProducts = useStore((state) => state.fetchProducts);
   const addProduct = useStore((state) => state.addProduct);
 
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Form
   const [name, setName] = useState('');
@@ -22,26 +26,53 @@ export const ProductsPage = () => {
   const [purchasePrice, setPurchasePrice] = useState(3200);
   const [taxRate, setTaxRate] = useState(18);
 
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    fetchProducts()
+      .catch((err) => {
+        if (isMounted) setError(err.message || 'Failed to load products');
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => { isMounted = false; };
+  }, [fetchProducts]);
+
   const filtered = products.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (p.name || '').toLowerCase().includes(search.toLowerCase()) || (p.sku || '').toLowerCase().includes(search.toLowerCase());
     const matchesCat = categoryFilter === 'All' || p.category === categoryFilter;
     return matchesSearch && matchesCat;
   });
 
-  const handleCreate = (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault();
-    addProduct({
-      name,
-      type,
-      category,
-      salesPrice: Number(salesPrice),
-      purchasePrice: Number(purchasePrice),
-      taxRate: Number(taxRate),
-      sku: `FURN-${name.slice(0, 3).toUpperCase()}-099`,
-      description: 'Urban furniture high-durability item.'
-    });
-    setIsAddModalOpen(false);
-    setName('');
+    setSubmitting(true);
+    setError(null);
+    try {
+      const typeEnum = type.toUpperCase() === 'GOODS' ? 'GOODS' : type.toUpperCase() === 'SERVICE' ? 'SERVICE' : 'COMBO';
+      const randomId = Math.floor(1000 + Math.random() * 9000);
+      const sku = `FURN-${name.slice(0, 3).toUpperCase()}-${randomId}`;
+
+      await addProduct({
+        name,
+        type: typeEnum,
+        category,
+        salesPrice: Number(salesPrice),
+        purchasePrice: Number(purchasePrice),
+        taxRate: Number(taxRate),
+        sku,
+        description: 'Urban furniture high-durability item.'
+      });
+
+      setIsAddModalOpen(false);
+      setName('');
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Failed to create product record in database');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const columns = [
@@ -63,7 +94,7 @@ export const ProductsPage = () => {
       header: 'Type',
       cell: (r) => (
         <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-          r.type === 'Goods' ? 'bg-blue-100 text-blue-800' : r.type === 'Service' ? 'bg-teal-100 text-teal-800' : 'bg-purple-100 text-purple-800'
+          r.type === 'Goods' || r.type === 'GOODS' ? 'bg-blue-100 text-blue-800' : r.type === 'Service' || r.type === 'SERVICE' ? 'bg-teal-100 text-teal-800' : 'bg-purple-100 text-purple-800'
         }`}>
           {r.type}
         </span>
@@ -72,11 +103,11 @@ export const ProductsPage = () => {
     { header: 'Category', accessor: 'category' },
     {
       header: 'Sales Price',
-      cell: (r) => <span className="font-bold text-emerald-700">₹{r.salesPrice.toLocaleString('en-IN')}</span>
+      cell: (r) => <span className="font-bold text-emerald-700">₹{Number(r.salesPrice).toLocaleString('en-IN')}</span>
     },
     {
       header: 'Purchase Price',
-      cell: (r) => <span className="font-medium text-gray-700">₹{r.purchasePrice.toLocaleString('en-IN')}</span>
+      cell: (r) => <span className="font-medium text-gray-700">₹{Number(r.purchasePrice).toLocaleString('en-IN')}</span>
     },
     { header: 'GST %', cell: (r) => `${r.taxRate}%` },
     { header: 'Status', cell: (r) => <StatusBadge status={r.status || 'Active'} /> },
@@ -104,6 +135,12 @@ export const ProductsPage = () => {
           </Button>
         }
       />
+
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
       <Card>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
@@ -135,7 +172,13 @@ export const ProductsPage = () => {
           </div>
         </div>
 
-        <Table columns={columns} data={filtered} onRowClick={(row) => navigate(`/products/${row.id}`)} />
+        {loading ? (
+          <div className="py-12 text-center text-gray-500 text-sm">Loading products from database...</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-gray-500 text-sm">No product records found.</div>
+        ) : (
+          <Table columns={columns} data={filtered} onRowClick={(row) => navigate(`/products/${row.id}`)} />
+        )}
       </Card>
 
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="+ Add New Product Record">
@@ -152,7 +195,9 @@ export const ProductsPage = () => {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="primary">Save Product</Button>
+            <Button type="submit" variant="primary" disabled={submitting}>
+              {submitting ? 'Saving to Database...' : 'Save Product'}
+            </Button>
           </div>
         </form>
       </Modal>

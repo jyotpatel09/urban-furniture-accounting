@@ -16,12 +16,13 @@ import { validateBody } from '../../middleware/validation.middleware.js';
 const router = Router();
 
 router.use(requireAuth);
+router.use(requireRole('ADMIN', 'ACCOUNTANT'));
 
 router.get('/', getAccounts);
 router.get('/:id', getAccountById);
 router.get('/:id/ledger', getAccountLedger);
-router.post('/', requireRole('ADMIN', 'ACCOUNTANT'), validateBody(createAccountSchema), createAccount);
-router.patch('/:id', requireRole('ADMIN', 'ACCOUNTANT'), validateBody(updateAccountSchema), updateAccount);
+router.post('/', validateBody(createAccountSchema), createAccount);
+router.patch('/:id', validateBody(updateAccountSchema), updateAccount);
 router.delete('/:id', requireRole('ADMIN'), deleteAccount);
 
 export default router;

@@ -7,17 +7,19 @@ export const LoginPage = () => {
   const [email, setEmail] = useState('admin@urbanfurniture.in');
   const [password, setPassword] = useState('password123');
   const [rememberMe, setRememberMe] = useState(true);
-  const setUser = useStore((state) => state.setUser);
+  const switchRoleAccount = useStore((state) => state.switchRoleAccount);
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    setUser({
-      name: email.includes('admin') ? 'Admin User' : 'Senior Accountant',
-      email: email,
-      role: email.includes('admin') ? 'Admin' : 'Accountant',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
-    });
+    await switchRoleAccount(email);
+    navigate('/dashboard');
+  };
+
+  const handleQuickSelect = async (accEmail) => {
+    setEmail(accEmail);
+    setPassword('Password@123');
+    await switchRoleAccount(accEmail);
     navigate('/dashboard');
   };
 
@@ -88,10 +90,33 @@ export const LoginPage = () => {
             <ArrowRight className="w-4 h-4 text-teal-300" />
           </button>
 
-          <div className="mt-4 p-3 bg-purple-50 rounded-lg border border-purple-100 text-xs text-purple-900 flex items-start gap-2">
-            <CheckCircle className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">Odoo Hackathon Finalist Demo:</span> Pre-loaded with realistic Indian Urban Furniture transactions & financial ledgers.
+          <div className="mt-4 p-3 bg-purple-50 rounded-xl border border-purple-100 text-xs text-purple-900 space-y-2">
+            <div className="flex items-center gap-1.5 font-bold">
+              <CheckCircle className="w-4 h-4 text-teal-600 shrink-0" />
+              <span>Select Active Account Role for Demo:</span>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => handleQuickSelect('admin@urbanfurniture.in')}
+                className="py-1.5 px-2 bg-white border border-purple-200 hover:bg-purple-900 hover:text-white font-medium rounded-md text-[11px] text-purple-900 transition-colors shadow-xs"
+              >
+                Administrator
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickSelect('accountant@urbanfurniture.in')}
+                className="py-1.5 px-2 bg-white border border-purple-200 hover:bg-purple-900 hover:text-white font-medium rounded-md text-[11px] text-purple-900 transition-colors shadow-xs"
+              >
+                Accountant
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickSelect('sales@urbanfurniture.in')}
+                className="py-1.5 px-2 bg-white border border-purple-200 hover:bg-purple-900 hover:text-white font-medium rounded-md text-[11px] text-purple-900 transition-colors shadow-xs"
+              >
+                Sales & Purchase
+              </button>
             </div>
           </div>
 

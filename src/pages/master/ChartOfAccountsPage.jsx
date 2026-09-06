@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { PageHeader, Card, Table, StatusBadge, Button, Modal, Input, Select } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
@@ -8,8 +8,15 @@ import { useNavigate } from 'react-router-dom';
 export const ChartOfAccountsPage = () => {
   const navigate = useNavigate();
   const accounts = useStore((state) => state.chartOfAccounts);
+  const fetchChartOfAccounts = useStore((state) => state.fetchChartOfAccounts);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchChartOfAccounts().finally(() => setLoading(false));
+  }, [fetchChartOfAccounts]);
 
   const filtered = accounts.filter((a) => {
     const matchesSearch = a.name.toLowerCase().includes(search.toLowerCase()) || a.code.includes(search);

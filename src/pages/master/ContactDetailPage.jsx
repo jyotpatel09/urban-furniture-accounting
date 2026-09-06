@@ -1,28 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
+import { contactsService } from '../../services';
 import { PageHeader, Card, StatCard, Table, StatusBadge, Button, Avatar, Tabs } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
-import { Mail, Phone, MapPin, Building, ArrowLeft, Plus, FileText, ShoppingBag, CreditCard } from 'lucide-react';
+import { Mail, Phone, MapPin, ArrowLeft, Plus, FileText, ShoppingBag, CreditCard } from 'lucide-react';
 
 export const ContactDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const contact = useStore((state) => state.contacts.find((c) => c.id === id)) || useStore((state) => state.contacts[0]);
-  const salesOrders = useStore((state) => state.salesOrders.filter((s) => s.customer === contact?.name || s.customerId === id));
-  const purchaseOrders = useStore((state) => state.purchaseOrders.filter((p) => p.vendor === contact?.name || p.vendorId === id));
-  const customerInvoices = useStore((state) => state.customerInvoices.filter((i) => i.customer === contact?.name || i.customerId === id));
-  const vendorBills = useStore((state) => state.vendorBills.filter((b) => b.vendor === contact?.name || b.vendorId === id));
+  const contactsInStore = useStore((state) => state.contacts);
+  const salesOrders = useStore((state) => state.salesOrders.filter((s) => s.customerId === id || s.customer === id));
+  const purchaseOrders = useStore((state) => state.purchaseOrders.filter((p) => p.vendorId === id || p.vendor === id));
+  const customerInvoices = useStore((state) => state.customerInvoices.filter((i) => i.customerId === id || i.customer === id));
+  const vendorBills = useStore((state) => state.vendorBills.filter((b) => b.vendorId === id || b.vendor === id));
 
+  const [contact, setContact] = useState(() => contactsInStore.find((c) => c.id === id));
+  const [loading, setLoading] = useState(!contact);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('orders');
 
-  if (!contact) {
-    return <div className="p-8 text-center text-gray-500">Contact not found.</div>;
-  }
+  useEffect(() => {
+    let isMounted = true;
+    if (id) {
+      setLoading(true);
+      contactsService.getById(id)
+        .then((data) => {
+          if (isMounted && data) setContact(data);
+        })
+        .catch((err) => {
+          if (isMounted) setError(err.message || 'Contact not found');
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+    }
+    return () => { isMounted = false; };
+  }, [id]);
 
-  const isCustomer = contact.type === 'Customer' || contact.type === 'Both';
-  const isVendor = contact.type === 'Vendor' || contact.type === 'Both';
+  if (loading) return <div className="p-8 text-center text-gray-500">Loading contact record from database...</div>;
+  if (error || !contact) return <div className="p-8 text-center text-red-500">{error || 'Contact record not found.'}</div>;
+
+  const contactType = contact.type === 'CUSTOMER' ? 'Customer' : contact.type === 'VENDOR' ? 'Vendor' : contact.type === 'BOTH' ? 'Both' : contact.type;
+  const isCustomer = contactType === 'Customer' || contactType === 'Both';
+  const isVendor = contactType === 'Vendor' || contactType === 'Both';
 
   return (
     <div className="space-y-6">
@@ -30,7 +52,7 @@ export const ContactDetailPage = () => {
 
       <PageHeader
         title={contact.name}
-        subtitle={`Master Data Record ID: ${contact.id} • ${contact.type}`}
+        subtitle={`Master Data Record ID: ${contact.id} • ${contactType}`}
         breadcrumbs={['Dashboard', 'Contacts', contact.name]}
         actions={
           <div className="flex items-center gap-2">
@@ -51,18 +73,16 @@ export const ContactDetailPage = () => {
         }
       />
 
-      {/* Main Grid Header */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Contact Info Card */}
         <Card className="lg:col-span-1">
           <div className="flex items-center gap-4 border-b border-gray-100 pb-4 mb-4">
             <Avatar name={contact.name} src={contact.avatar} size="lg" />
             <div>
               <h2 className="text-lg font-bold text-gray-900">{contact.name}</h2>
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                contact.type === 'Customer' ? 'bg-purple-100 text-purple-800' : 'bg-amber-100 text-amber-800'
+                isCustomer ? 'bg-purple-100 text-purple-800' : 'bg-amber-100 text-amber-800'
               }`}>
-                {contact.type}
+                {contactType}
               </span>
             </div>
           </div>
@@ -82,30 +102,28 @@ export const ContactDetailPage = () => {
             </div>
             <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
               <span className="text-gray-500">Account Status:</span>
-              <StatusBadge status={contact.status} />
+              <StatusBadge status={contact.status || 'Active'} />
             </div>
           </div>
         </Card>
 
-        {/* Financial KPI Summary Cards */}
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
           {isCustomer && (
             <>
-              <StatCard title="Total Customer Sales" value={`₹${(contact.totalSales || 175000).toLocaleString('en-IN')}`} color="purple" icon={ShoppingBag} />
-              <StatCard title="Outstanding Receivables" value={`₹${(contact.outstanding || 25000).toLocaleString('en-IN')}`} color="rose" icon={FileText} />
+              <StatCard title="Total Customer Sales" value={`₹${Number(contact.totalSales || 0).toLocaleString('en-IN')}`} color="purple" icon={ShoppingBag} />
+              <StatCard title="Outstanding Receivables" value={`₹${Number(contact.outstanding || 0).toLocaleString('en-IN')}`} color="rose" icon={FileText} />
             </>
           )}
 
           {isVendor && (
             <>
-              <StatCard title="Total Purchases" value={`₹${(contact.totalPurchases || 450000).toLocaleString('en-IN')}`} color="amber" icon={ShoppingBag} />
-              <StatCard title="Outstanding Payables" value={`₹${(contact.outstanding || 70000).toLocaleString('en-IN')}`} color="rose" icon={CreditCard} />
+              <StatCard title="Total Purchases" value={`₹${Number(contact.totalPurchases || 0).toLocaleString('en-IN')}`} color="amber" icon={ShoppingBag} />
+              <StatCard title="Outstanding Payables" value={`₹${Number(contact.outstanding || 0).toLocaleString('en-IN')}`} color="rose" icon={CreditCard} />
             </>
           )}
         </div>
       </div>
 
-      {/* Linked Transactions Tabs */}
       <Card>
         <Tabs
           tabs={[
@@ -125,7 +143,7 @@ export const ContactDetailPage = () => {
                   columns={[
                     { header: 'Order ID', cell: (r) => <span className="font-mono font-bold text-purple-900">{r.id}</span> },
                     { header: 'Date', accessor: 'date' },
-                    { header: 'Amount', cell: (r) => `₹${r.total.toLocaleString('en-IN')}` },
+                    { header: 'Amount', cell: (r) => `₹${Number(r.total || 0).toLocaleString('en-IN')}` },
                     { header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
                     { header: 'Actions', cell: (r) => <Button size="sm" variant="ghost" onClick={() => navigate(`/sales/orders/${r.id}`)}>View</Button> }
                   ]}
@@ -141,7 +159,7 @@ export const ContactDetailPage = () => {
                   columns={[
                     { header: 'PO ID', cell: (r) => <span className="font-mono font-bold text-teal-800">{r.id}</span> },
                     { header: 'Date', accessor: 'date' },
-                    { header: 'Amount', cell: (r) => `₹${r.total.toLocaleString('en-IN')}` },
+                    { header: 'Amount', cell: (r) => `₹${Number(r.total || 0).toLocaleString('en-IN')}` },
                     { header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
                     { header: 'Actions', cell: (r) => <Button size="sm" variant="ghost" onClick={() => navigate(`/purchase/orders/${r.id}`)}>View</Button> }
                   ]}
@@ -161,8 +179,8 @@ export const ContactDetailPage = () => {
                   columns={[
                     { header: 'Invoice ID', cell: (r) => <span className="font-mono font-bold text-purple-900">{r.id}</span> },
                     { header: 'Date', accessor: 'date' },
-                    { header: 'Amount', cell: (r) => `₹${r.amount.toLocaleString('en-IN')}` },
-                    { header: 'Paid', cell: (r) => `₹${r.paid.toLocaleString('en-IN')}` },
+                    { header: 'Amount', cell: (r) => `₹${Number(r.amount || 0).toLocaleString('en-IN')}` },
+                    { header: 'Paid', cell: (r) => `₹${Number(r.paid || 0).toLocaleString('en-IN')}` },
                     { header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
                     { header: 'Actions', cell: (r) => <Button size="sm" variant="ghost" onClick={() => navigate(`/sales/invoices/${r.id}`)}>View</Button> }
                   ]}
@@ -178,8 +196,8 @@ export const ContactDetailPage = () => {
                   columns={[
                     { header: 'Bill ID', cell: (r) => <span className="font-mono font-bold text-amber-800">{r.id}</span> },
                     { header: 'Date', accessor: 'date' },
-                    { header: 'Amount', cell: (r) => `₹${r.amount.toLocaleString('en-IN')}` },
-                    { header: 'Remaining', cell: (r) => `₹${r.remaining.toLocaleString('en-IN')}` },
+                    { header: 'Amount', cell: (r) => `₹${Number(r.amount || 0).toLocaleString('en-IN')}` },
+                    { header: 'Remaining', cell: (r) => `₹${Number(r.remaining || 0).toLocaleString('en-IN')}` },
                     { header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
                     { header: 'Actions', cell: (r) => <Button size="sm" variant="ghost" onClick={() => navigate(`/purchase/bills/${r.id}`)}>View</Button> }
                   ]}

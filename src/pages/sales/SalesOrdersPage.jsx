@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { PageHeader, Card, Table, StatusBadge, Button, Modal, Input, Select } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
-import { Plus, Search, Eye, FileText, ShoppingBag, ArrowRight } from 'lucide-react';
+import { Plus, Search, Eye, FileText } from 'lucide-react';
 
 export const SalesOrdersPage = () => {
   const navigate = useNavigate();
@@ -12,63 +12,136 @@ export const SalesOrdersPage = () => {
   const createInvoiceFromSO = useStore((state) => state.createInvoiceFromSO);
   const contacts = useStore((state) => state.contacts);
   const products = useStore((state) => state.products);
+  const fetchSalesOrders = useStore((state) => state.fetchSalesOrders);
+  const fetchContacts = useStore((state) => state.fetchContacts);
+  const fetchProducts = useStore((state) => state.fetchProducts);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  // New SO Form State
-  const [customer, setCustomer] = useState(contacts[0]?.name || '');
-  const [productId, setProductId] = useState(products[0]?.id || '');
-  const [qty, setQty] = useState(2);
+  // New SO Form State — use IDs, not names
+  const [customerId, setCustomerId] = useState('');
+  const [productId, setProductId] = useState('');
+  const [qty, setQty] = useState(1);
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const filtered = salesOrders.filter((s) => {
-    const matchesSearch = s.id.toLowerCase().includes(search.toLowerCase()) || s.customer.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || s.status === statusFilter;
+  // Fetch all required data on mount
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      fetchSalesOrders(),
+      fetchContacts(),
+      fetchProducts(),
+    ]).finally(() => setLoading(false));
+  }, [fetchSalesOrders, fetchContacts, fetchProducts]);
+
+  // Set default selections once data loads
+  useEffect(() => {
+    const customers = contacts.filter(c => c.type !== 'VENDOR');
+    if (!customerId && customers.length > 0) setCustomerId(customers[0].id);
+  }, [contacts, customerId]);
+
+  useEffect(() => {
+    if (!productId && products.length > 0) setProductId(products[0].id);
+  }, [products, productId]);
+
+  const customers = contacts.filter(c => c.type !== 'VENDOR');
+
+  const safeOrders = Array.isArray(salesOrders) ? salesOrders : [];
+
+  const filtered = safeOrders.filter((s) => {
+    const soId = (s.number || s.id || '').toLowerCase();
+    const customerName = (s.customer?.name || s.customerName || '').toLowerCase();
+    const matchesSearch = soId.includes(search.toLowerCase()) || customerName.includes(search.toLowerCase());
+    const soStatus = (s.status || '').toUpperCase();
+    const matchesStatus =
+      statusFilter === 'All' ||
+      soStatus === statusFilter.toUpperCase() ||
+      s.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const handleCreateSO = (e) => {
+  const handleCreateSO = async (e) => {
     e.preventDefault();
-    const prod = products.find(p => p.id === productId) || products[0];
-    const subtotal = prod.salesPrice * Number(qty);
-    const tax = Math.round(subtotal * (prod.taxRate / 100));
+    setFormError('');
 
-    addSalesOrder({
-      customer,
-      customerId: contacts.find(c => c.name === customer)?.id || 'CUST-001',
-      items: [{ productId: prod.id, productName: prod.name, qty: Number(qty), unitPrice: prod.salesPrice, taxRate: prod.taxRate, subtotal }],
-      subtotal,
-      tax,
-      total: subtotal + tax
-    });
-    setIsAddModalOpen(false);
+    if (!customerId) { setFormError('Please select a customer.'); return; }
+    if (!productId) { setFormError('Please select a product.'); return; }
+    if (!qty || Number(qty) < 1) { setFormError('Quantity must be at least 1.'); return; }
+
+    const prod = products.find(p => p.id === productId);
+    if (!prod) { setFormError('Selected product not found. Please refresh.'); return; }
+
+    setSubmitting(true);
+    try {
+      await addSalesOrder({
+        customerId,
+        date: orderDate,
+        items: [{
+          productId: prod.id,
+          quantity: Number(qty),
+          unitPrice: Number(prod.salesPrice),
+          taxRate: Number(prod.taxRate || 18),
+        }],
+      });
+      setIsAddModalOpen(false);
+      setQty(1);
+      setFormError('');
+    } catch (err) {
+      console.error('Create SO error:', err);
+      setFormError(err.message || 'Failed to create sales order. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateInvoice = async (soId, e) => {
+    e.stopPropagation();
+    try {
+      await createInvoiceFromSO(soId);
+      navigate('/sales/invoices');
+    } catch (err) {
+      console.error('Create invoice error:', err);
+      alert(err.message || 'Failed to create invoice.');
+    }
   };
 
   const columns = [
     {
       header: 'Order Number',
-      cell: (r) => <span className="font-mono font-bold text-purple-900">{r.id}</span>
+      cell: (r) => <span className="font-mono font-bold text-purple-900">{r.number || r.id}</span>
     },
     {
       header: 'Customer',
-      cell: (r) => <span className="font-medium text-gray-900">{r.customer}</span>
+      cell: (r) => <span className="font-medium text-gray-900">{r.customer?.name || r.customerName || '—'}</span>
     },
-    { header: 'Order Date', accessor: 'date' },
+    {
+      header: 'Order Date',
+      cell: (r) => {
+        const d = r.date || r.createdAt;
+        return d ? new Date(d).toLocaleDateString('en-IN') : '—';
+      }
+    },
     {
       header: 'Products Summary',
       cell: (r) => (
         <span className="text-xs text-gray-600">
-          {r.items?.map(i => `${i.productName} (x${i.qty})`).join(', ')}
+          {(r.items || []).map(i => `${i.product?.name || i.productName || 'Item'} (x${i.quantity || i.qty || 0})`).join(', ') || '—'}
         </span>
       )
     },
     {
       header: 'Total (₹)',
-      cell: (r) => <span className="font-bold text-gray-900">₹{r.total.toLocaleString('en-IN')}</span>
+      cell: (r) => {
+        const total = Number(r.totalAmount || r.total || 0);
+        return <span className="font-bold text-gray-900">₹{total.toLocaleString('en-IN')}</span>;
+      }
     },
-    { header: 'Order Status', cell: (r) => <StatusBadge status={r.status} /> },
-    { header: 'Payment', cell: (r) => <StatusBadge status={r.paymentStatus} /> },
+    { header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
     {
       header: 'Actions',
       cell: (r) => (
@@ -76,15 +149,12 @@ export const SalesOrdersPage = () => {
           <Button size="sm" variant="ghost" icon={Eye} onClick={() => navigate(`/sales/orders/${r.id}`)}>
             View
           </Button>
-          {r.status !== 'Invoiced' && (
+          {r.status !== 'INVOICED' && r.status !== 'Invoiced' && (
             <Button
               size="sm"
               variant="teal"
               icon={FileText}
-              onClick={() => {
-                createInvoiceFromSO(r.id);
-                navigate('/sales/invoices');
-              }}
+              onClick={(e) => handleCreateInvoice(r.id, e)}
             >
               Create Invoice
             </Button>
@@ -123,7 +193,7 @@ export const SalesOrdersPage = () => {
           </div>
 
           <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto">
-            {['All', 'Quotation', 'Confirmed', 'Invoiced'].map((st) => (
+            {['All', 'DRAFT', 'CONFIRMED', 'INVOICED', 'CANCELLED'].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -133,42 +203,117 @@ export const SalesOrdersPage = () => {
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
                 }`}
               >
-                {st}
+                {st === 'All' ? 'All' : st.charAt(0) + st.slice(1).toLowerCase()}
               </button>
             ))}
           </div>
         </div>
 
-        <Table columns={columns} data={filtered} onRowClick={(row) => navigate(`/sales/orders/${row.id}`)} />
+        {loading ? (
+          <div className="py-12 text-center text-gray-500 text-sm">Loading sales orders from database...</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-gray-500 text-sm">No sales orders found.</div>
+        ) : (
+          <Table columns={columns} data={filtered} onRowClick={(row) => navigate(`/sales/orders/${row.id}`)} />
+        )}
       </Card>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="+ Create Sales Order">
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setFormError(''); }} title="+ Create Sales Order">
         <form onSubmit={handleCreateSO} className="space-y-4">
-          <Select
-            label="Customer"
-            required
-            value={customer}
-            onChange={(e) => setCustomer(e.target.value)}
-            options={contacts.filter(c => c.type !== 'Vendor').map(c => ({ label: c.name, value: c.name }))}
-          />
-          <Select
-            label="Product Item"
-            required
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            options={products.map(p => ({ label: `${p.name} — ₹${p.salesPrice.toLocaleString('en-IN')}`, value: p.id }))}
-          />
-          <Input
-            label="Quantity"
-            type="number"
-            min="1"
-            required
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-          />
+          {formError && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">
+              {formError}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Customer *</label>
+            <select
+              required
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-purple-800"
+            >
+              <option value="">— Select Customer —</option>
+              {customers.map(c => (
+                <option key={c.id} value={c.id}>{c.name} {c.email ? `(${c.email})` : ''}</option>
+              ))}
+            </select>
+            {customers.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">No customers found. Add contacts first.</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Product *</label>
+            <select
+              required
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-purple-800"
+            >
+              <option value="">— Select Product —</option>
+              {products.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — ₹{Number(p.salesPrice).toLocaleString('en-IN')} (GST: {p.taxRate}%)
+                </option>
+              ))}
+            </select>
+            {products.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">No products found. Add products first.</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Quantity *</label>
+            <input
+              type="number"
+              min="1"
+              required
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-purple-800"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Order Date</label>
+            <input
+              type="date"
+              value={orderDate}
+              onChange={(e) => setOrderDate(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-purple-800"
+            />
+          </div>
+
+          {productId && products.find(p => p.id === productId) && (() => {
+            const prod = products.find(p => p.id === productId);
+            const subtotal = Number(prod.salesPrice) * Number(qty || 0);
+            const tax = (subtotal * Number(prod.taxRate || 18)) / 100;
+            const total = subtotal + tax;
+            return (
+              <div className="p-3 bg-purple-50 rounded-lg text-xs text-purple-900 space-y-1 border border-purple-100">
+                <div className="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span className="font-semibold">₹{subtotal.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>GST ({prod.taxRate}%):</span>
+                  <span className="font-semibold">₹{tax.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between font-bold border-t border-purple-200 pt-1">
+                  <span>Total:</span>
+                  <span>₹{total.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="primary">Confirm Sales Order</Button>
+            <Button type="button" variant="secondary" onClick={() => { setIsAddModalOpen(false); setFormError(''); }}>Cancel</Button>
+            <Button type="submit" variant="primary" disabled={submitting || !customerId || !productId}>
+              {submitting ? 'Creating...' : 'Confirm Sales Order'}
+            </Button>
           </div>
         </form>
       </Modal>

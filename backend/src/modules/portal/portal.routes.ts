@@ -10,7 +10,7 @@ import { requireRole } from '../../middleware/role.middleware.js';
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireRole('CONTACT', 'ADMIN'));
+router.use(requireRole('SALES_PURCHASE', 'ADMIN'));
 
 router.get('/me', getPortalProfile);
 router.get('/invoices', getPortalInvoices);

@@ -6,6 +6,7 @@ import {
   confirmPurchaseOrder,
   receivePurchaseOrder,
   createPurchaseOrderSchema,
+  createBillFromOrder,
 } from './purchases.controller.js';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRole } from '../../middleware/role.middleware.js';
@@ -16,8 +17,10 @@ router.use(requireAuth);
 
 router.get('/', getPurchaseOrders);
 router.get('/:id', getPurchaseOrderById);
-router.post('/', requireRole('ADMIN', 'ACCOUNTANT'), validateBody(createPurchaseOrderSchema), createPurchaseOrder);
-router.post('/:id/confirm', requireRole('ADMIN', 'ACCOUNTANT'), confirmPurchaseOrder);
-router.post('/:id/receive', requireRole('ADMIN', 'ACCOUNTANT'), receivePurchaseOrder);
+router.post('/', requireRole('ADMIN', 'SALES_PURCHASE'), validateBody(createPurchaseOrderSchema), createPurchaseOrder);
+router.post('/:id/confirm', requireRole('ADMIN', 'SALES_PURCHASE'), confirmPurchaseOrder);
+router.post('/:id/receive', requireRole('ADMIN', 'SALES_PURCHASE'), receivePurchaseOrder);
+router.post('/:id/create-bill', requireRole('ADMIN', 'ACCOUNTANT', 'SALES_PURCHASE'), createBillFromOrder);
 
 export default router;
+

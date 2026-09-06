@@ -11,7 +11,7 @@ export const registerSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['ADMIN', 'ACCOUNTANT', 'CONTACT']).optional().default('CONTACT'),
+  role: z.enum(['ADMIN', 'ACCOUNTANT', 'SALES_PURCHASE']).optional().default('SALES_PURCHASE'),
   contactId: z.string().optional(),
 });
 

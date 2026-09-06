@@ -1,19 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { PageHeader, Card, Table, StatusBadge, Button, Modal, Input, Select, Avatar } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
-import { Plus, Search, Filter, Eye, Edit3, Trash2, Mail, Phone, MapPin } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, Mail, Phone, MapPin } from 'lucide-react';
 
 export const ContactsPage = () => {
   const navigate = useNavigate();
   const contacts = useStore((state) => state.contacts);
+  const fetchContacts = useStore((state) => state.fetchContacts);
   const addContact = useStore((state) => state.addContact);
   const deleteContact = useStore((state) => state.deleteContact);
 
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Form State
   const [name, setName] = useState('');
@@ -25,21 +29,57 @@ export const ContactsPage = () => {
   const [state, setStateName] = useState('Gujarat');
   const [pincode, setPincode] = useState('380001');
 
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    fetchContacts()
+      .catch((err) => {
+        if (isMounted) setError(err.message || 'Failed to load contacts');
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => { isMounted = false; };
+  }, [fetchContacts]);
+
   const filtered = contacts.filter((c) => {
-    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || 
-                          c.email.toLowerCase().includes(search.toLowerCase()) || 
-                          c.city.toLowerCase().includes(search.toLowerCase());
-    const matchesType = typeFilter === 'All' || c.type === typeFilter || c.type === 'Both';
+    const matchesSearch = (c.name || '').toLowerCase().includes(search.toLowerCase()) || 
+                          (c.email || '').toLowerCase().includes(search.toLowerCase()) || 
+                          (c.city || '').toLowerCase().includes(search.toLowerCase());
+    const matchesType = typeFilter === 'All' || 
+                        c.type === typeFilter || 
+                        c.type === typeFilter.toUpperCase() || 
+                        c.type === 'Both' || 
+                        c.type === 'BOTH';
     return matchesSearch && matchesType;
   });
 
-  const handleCreate = (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault();
-    addContact({ name, type, email, phone, address, city, state, pincode });
-    setIsAddModalOpen(false);
-    setName('');
-    setEmail('');
-    setPhone('');
+    setSubmitting(true);
+    setError(null);
+    try {
+      const typeEnum = type.toUpperCase() === 'CUSTOMER' ? 'CUSTOMER' : type.toUpperCase() === 'VENDOR' ? 'VENDOR' : 'BOTH';
+      await addContact({ name, type: typeEnum, email, phone, address, city, state, pincode });
+      setIsAddModalOpen(false);
+      setName('');
+      setEmail('');
+      setPhone('');
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Failed to create contact record in database');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await deleteContact(id);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Failed to delete/archive contact');
+    }
   };
 
   const columns = [
@@ -57,13 +97,16 @@ export const ContactsPage = () => {
     },
     {
       header: 'Type',
-      cell: (r) => (
-        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-          r.type === 'Customer' ? 'bg-purple-100 text-purple-800' : r.type === 'Vendor' ? 'bg-amber-100 text-amber-800' : 'bg-teal-100 text-teal-800'
-        }`}>
-          {r.type}
-        </span>
-      )
+      cell: (r) => {
+        const displayType = r.type === 'CUSTOMER' ? 'Customer' : r.type === 'VENDOR' ? 'Vendor' : r.type === 'BOTH' ? 'Both' : r.type;
+        return (
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+            r.type === 'Customer' || r.type === 'CUSTOMER' ? 'bg-purple-100 text-purple-800' : r.type === 'Vendor' || r.type === 'VENDOR' ? 'bg-amber-100 text-amber-800' : 'bg-teal-100 text-teal-800'
+          }`}>
+            {displayType}
+          </span>
+        );
+      }
     },
     {
       header: 'Email / Phone',
@@ -91,13 +134,13 @@ export const ContactsPage = () => {
       header: 'Outstanding (₹)',
       cell: (r) => (
         <span className="font-semibold text-gray-900">
-          ₹{(r.outstanding || 0).toLocaleString('en-IN')}
+          ₹{Number(r.outstanding || 0).toLocaleString('en-IN')}
         </span>
       )
     },
     {
       header: 'Status',
-      cell: (r) => <StatusBadge status={r.status || 'Active'} />
+      cell: (r) => <StatusBadge status={r.status || (r.isArchived ? 'Archived' : 'Active')} />
     },
     {
       header: 'Actions',
@@ -111,7 +154,7 @@ export const ContactsPage = () => {
             <Eye className="w-4 h-4" />
           </button>
           <button
-            onClick={() => deleteContact(r.id)}
+            onClick={() => handleDelete(r.id)}
             className="p-1.5 rounded hover:bg-rose-100 text-rose-600 transition-colors"
             title="Archive Contact"
           >
@@ -136,6 +179,12 @@ export const ContactsPage = () => {
           </Button>
         }
       />
+
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
       <Card>
         {/* Controls Toolbar */}
@@ -168,13 +217,17 @@ export const ContactsPage = () => {
           </div>
         </div>
 
-        {/* Contacts Table */}
-        <Table
-          columns={columns}
-          data={filtered}
-          onRowClick={(row) => navigate(`/contacts/${row.id}`)}
-          emptyMessage="No contacts found."
-        />
+        {loading ? (
+          <div className="py-12 text-center text-gray-500 text-sm">Loading contacts from database...</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-gray-500 text-sm">No contacts found in database.</div>
+        ) : (
+          <Table
+            columns={columns}
+            data={filtered}
+            onRowClick={(row) => navigate(`/contacts/${row.id}`)}
+          />
+        )}
       </Card>
 
       {/* Add Contact Modal */}
@@ -196,7 +249,9 @@ export const ContactsPage = () => {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="primary">Save Contact</Button>
+            <Button type="submit" variant="primary" disabled={submitting}>
+              {submitting ? 'Saving to Database...' : 'Save Contact'}
+            </Button>
           </div>
         </form>
       </Modal>

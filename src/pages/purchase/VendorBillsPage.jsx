@@ -1,33 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { PageHeader, Card, Table, StatusBadge, Button, Modal, Input, Select, StatCard } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
 import { Search, Eye, CreditCard, FileText, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 
+// Normalize vendor bill from backend: backend returns totalAmount, paidAmount, remainingAmount
+function normalizeBill(bill) {
+  return {
+    ...bill,
+    vendor: bill.vendor?.name || bill.vendorName || '—',
+    amount: Number(bill.totalAmount || bill.amount || 0),
+    paid: Number(bill.paidAmount || bill.paid || 0),
+    remaining: Number(bill.remainingAmount || bill.remaining || 0),
+    date: bill.billDate || bill.date,
+    status: bill.status || 'DRAFT',
+  };
+}
+
 export const VendorBillsPage = () => {
   const navigate = useNavigate();
-  const bills = useStore((state) => state.vendorBills);
+  const rawBills = useStore((state) => state.vendorBills);
   const registerVendorPayment = useStore((state) => state.registerVendorPayment);
+  const fetchVendorBills = useStore((state) => state.fetchVendorBills);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [activeBillModal, setActiveBillModal] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [payError, setPayError] = useState('');
 
   // Payment Form
   const [payAmount, setPayAmount] = useState(0);
   const [payMethod, setPayMethod] = useState('Bank - HDFC Account');
   const [payRef, setPayRef] = useState('');
 
+  useEffect(() => {
+    setLoading(true);
+    fetchVendorBills().finally(() => setLoading(false));
+  }, [fetchVendorBills]);
+
+  const bills = (Array.isArray(rawBills) ? rawBills : []).map(normalizeBill);
+
   // Summary Metrics
-  const totalAmount = bills.reduce((acc, b) => acc + (b.amount || 0), 0);
-  const totalPaid = bills.reduce((acc, b) => acc + (b.paid || 0), 0);
-  const totalRemaining = bills.reduce((acc, b) => acc + (b.remaining || 0), 0);
-  const overdueCount = bills.filter(b => b.status === 'Overdue').length;
+  const totalAmount = bills.reduce((acc, b) => acc + b.amount, 0);
+  const totalPaid = bills.reduce((acc, b) => acc + b.paid, 0);
+  const totalRemaining = bills.reduce((acc, b) => acc + b.remaining, 0);
+  const overdueCount = bills.filter(b => (b.status || '').toUpperCase() === 'OVERDUE').length;
 
   const filtered = bills.filter((b) => {
-    const matchesSearch = b.id.toLowerCase().includes(search.toLowerCase()) || b.vendor.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || b.status === statusFilter;
+    const billId = (b.number || b.id || '').toLowerCase();
+    const vendor = (b.vendor || '').toLowerCase();
+    const matchesSearch = billId.includes(search.toLowerCase()) || vendor.includes(search.toLowerCase());
+    const billStatus = (b.status || '').toUpperCase();
+    const matchesStatus =
+      statusFilter === 'All' ||
+      billStatus === statusFilter.toUpperCase() ||
+      b.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
@@ -35,24 +65,39 @@ export const VendorBillsPage = () => {
     setActiveBillModal(bill);
     setPayAmount(bill.remaining || bill.amount);
     setPayRef(`PAY-V-${Date.now().toString().slice(-4)}`);
+    setPayError('');
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    if (activeBillModal) {
-      registerVendorPayment(activeBillModal.id, payAmount, payMethod, payRef);
+    if (!activeBillModal) return;
+    setSubmitting(true);
+    setPayError('');
+    try {
+      await registerVendorPayment(activeBillModal.id, payAmount, payMethod, payRef);
       setActiveBillModal(null);
+    } catch (err) {
+      console.error('Payment error:', err);
+      setPayError(err.message || 'Failed to register payment. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const columns = [
     {
       header: 'Bill Number',
-      cell: (r) => <span className="font-mono font-bold text-amber-900">{r.id}</span>
+      cell: (r) => <span className="font-mono font-bold text-amber-900">{r.number || r.id}</span>
     },
     { header: 'Vendor', cell: (r) => <span className="font-semibold text-slate-900">{r.vendor}</span> },
-    { header: 'Bill Date', accessor: 'date' },
-    { header: 'Due Date', accessor: 'dueDate' },
+    {
+      header: 'Bill Date',
+      cell: (r) => r.date ? new Date(r.date).toLocaleDateString('en-IN') : '—'
+    },
+    {
+      header: 'Due Date',
+      cell: (r) => r.dueDate ? new Date(r.dueDate).toLocaleDateString('en-IN') : '—'
+    },
     {
       header: 'Bill Total',
       cell: (r) => <span className="font-bold text-slate-900 font-mono">₹{r.amount.toLocaleString('en-IN')}</span>
@@ -115,7 +160,7 @@ export const VendorBillsPage = () => {
           </div>
 
           <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto">
-            {['All', 'Draft', 'Posted', 'Partially Paid', 'Paid', 'Overdue'].map((st) => (
+            {['All', 'DRAFT', 'POSTED', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -125,20 +170,30 @@ export const VendorBillsPage = () => {
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
                 }`}
               >
-                {st}
+                {st === 'All' ? 'All' : st.replace('_', ' ').charAt(0) + st.replace('_', ' ').slice(1).toLowerCase()}
               </button>
             ))}
           </div>
         </div>
 
-        <Table columns={columns} data={filtered} onRowClick={(row) => navigate(`/purchase/bills/${row.id}`)} />
+        {loading ? (
+          <div className="py-12 text-center text-gray-500 text-sm">Loading vendor bills from database...</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-gray-500 text-sm">No vendor bills found.</div>
+        ) : (
+          <Table columns={columns} data={filtered} onRowClick={(row) => navigate(`/purchase/bills/${row.id}`)} />
+        )}
       </Card>
 
-      <Modal isOpen={!!activeBillModal} onClose={() => setActiveBillModal(null)} title={`Pay Vendor Bill ${activeBillModal?.id}`}>
+      <Modal isOpen={!!activeBillModal} onClose={() => { setActiveBillModal(null); setPayError(''); }} title={`Pay Vendor Bill ${activeBillModal?.number || activeBillModal?.id}`}>
         <form onSubmit={handleRegister} className="space-y-4">
+          {payError && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">{payError}</div>
+          )}
+
           <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-900 flex justify-between font-semibold border border-amber-100">
             <span>Vendor: <b>{activeBillModal?.vendor}</b></span>
-            <span>Outstanding Payable: <b>₹{activeBillModal?.remaining.toLocaleString('en-IN')}</b></span>
+            <span>Outstanding Payable: <b>₹{(activeBillModal?.remaining || 0).toLocaleString('en-IN')}</b></span>
           </div>
 
           <Input label="Payment Amount (₹)" type="number" required max={activeBillModal?.remaining} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
@@ -146,8 +201,10 @@ export const VendorBillsPage = () => {
           <Input label="Reference / NEFT UTR" required value={payRef} onChange={(e) => setPayRef(e.target.value)} />
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setActiveBillModal(null)}>Cancel</Button>
-            <Button type="submit" variant="teal">Disburse Payment</Button>
+            <Button type="button" variant="secondary" onClick={() => { setActiveBillModal(null); setPayError(''); }}>Cancel</Button>
+            <Button type="submit" variant="teal" disabled={submitting}>
+              {submitting ? 'Processing...' : 'Disburse Payment'}
+            </Button>
           </div>
         </form>
       </Modal>

@@ -1,22 +1,50 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
+import { productsService } from '../../services';
 import { PageHeader, Card, StatCard, Table, StatusBadge, Button } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
-import { ArrowLeft, Package, DollarSign, Tag, ShoppingBag, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Package, ShoppingBag, ShoppingCart } from 'lucide-react';
 
 export const ProductDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const product = useStore((state) => state.products.find((p) => p.id === id)) || useStore((state) => state.products[0]);
+  const productsInStore = useStore((state) => state.products);
   const salesOrders = useStore((state) => state.salesOrders);
   const purchaseOrders = useStore((state) => state.purchaseOrders);
 
-  if (!product) return <div className="p-8 text-center text-gray-500">Product not found.</div>;
+  const [product, setProduct] = useState(() => productsInStore.find((p) => p.id === id));
+  const [loading, setLoading] = useState(!product);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (id) {
+      setLoading(true);
+      productsService.getById(id)
+        .then((data) => {
+          if (isMounted && data) setProduct(data);
+        })
+        .catch((err) => {
+          if (isMounted) setError(err.message || 'Product not found');
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+    }
+    return () => { isMounted = false; };
+  }, [id]);
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Loading product details...</div>;
+  if (error || !product) return <div className="p-8 text-center text-red-500">{error || 'Product not found.'}</div>;
 
   const salesHistory = salesOrders.filter((s) => s.items?.some((i) => i.productId === product.id || i.productName === product.name));
   const purchaseHistory = purchaseOrders.filter((p) => p.items?.some((i) => i.productId === product.id || i.productName === product.name));
+
+  const salesPrice = Number(product.salesPrice || 0);
+  const purchasePrice = Number(product.purchasePrice || 0);
+  const marginPercent = salesPrice > 0 ? Math.round(((salesPrice - purchasePrice) / salesPrice) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -50,29 +78,27 @@ export const ProductDetailPage = () => {
           <div className="space-y-3 text-xs">
             <div className="flex justify-between py-1 border-b border-gray-100">
               <span className="text-gray-500">Sales Price:</span>
-              <span className="font-bold text-emerald-700">₹{product.salesPrice.toLocaleString('en-IN')}</span>
+              <span className="font-bold text-emerald-700">₹{salesPrice.toLocaleString('en-IN')}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-gray-100">
               <span className="text-gray-500">Purchase Cost:</span>
-              <span className="font-semibold text-gray-800">₹{product.purchasePrice.toLocaleString('en-IN')}</span>
+              <span className="font-semibold text-gray-800">₹{purchasePrice.toLocaleString('en-IN')}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-gray-100">
               <span className="text-gray-500">Gross Profit Margin:</span>
-              <span className="font-bold text-purple-900">
-                {Math.round(((product.salesPrice - product.purchasePrice) / product.salesPrice) * 100)}%
-              </span>
+              <span className="font-bold text-purple-900">{marginPercent}%</span>
             </div>
             <div className="flex justify-between py-1 border-b border-gray-100">
               <span className="text-gray-500">Applicable GST:</span>
               <span className="font-semibold text-gray-900">{product.taxRate}%</span>
             </div>
-            <p className="text-gray-600 pt-2">{product.description}</p>
+            <p className="text-gray-600 pt-2">{product.description || 'No description provided.'}</p>
           </div>
         </Card>
 
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <StatCard title="Total Sold Quantity" value={`${product.salesCount || 142} Units`} color="purple" icon={ShoppingBag} />
-          <StatCard title="Total Purchased Stock" value={`${product.purchaseCount || 200} Units`} color="teal" icon={ShoppingCart} />
+          <StatCard title="Total Sold Quantity" value={`${product.salesCount || 0} Units`} color="purple" icon={ShoppingBag} />
+          <StatCard title="Total Purchased Stock" value={`${product.purchaseCount || 0} Units`} color="teal" icon={ShoppingCart} />
         </div>
       </div>
 

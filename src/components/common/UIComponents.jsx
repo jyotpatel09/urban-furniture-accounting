@@ -209,8 +209,8 @@ export const StatCard = ({ title, value, change, isPositive, comparisonText = 'v
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 shadow-xs transition-all hover:shadow-md hover:border-slate-300 min-w-0 w-full flex flex-col justify-between group">
       {/* Top: Category Title + Subtle Icon Container */}
-      <div className="flex items-start justify-between gap-1.5 mb-1.5 min-w-0 w-full">
-        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider leading-[1.25] flex-1 min-w-0 whitespace-normal break-words pr-0.5">
+      <div className="flex items-center justify-between gap-1 mb-1.5 min-w-0 w-full">
+        <span className="text-[11px] sm:text-[12px] font-bold text-slate-500 uppercase tracking-wider leading-tight flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis">
           {title}
         </span>
         {Icon && (
@@ -222,7 +222,7 @@ export const StatCard = ({ title, value, change, isPositive, comparisonText = 'v
 
       {/* Middle: Dominant Financial Value */}
       <div className="my-1 sm:my-1.5 min-w-0 w-full">
-        <span className="text-lg sm:text-xl lg:text-[21px] xl:text-[19px] 2xl:text-2xl font-extrabold text-slate-900 tracking-tight block font-sans min-w-0 leading-none break-all sm:break-normal">
+        <span className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight block font-sans min-w-0 leading-none whitespace-nowrap overflow-hidden text-ellipsis">
           {value}
         </span>
       </div>

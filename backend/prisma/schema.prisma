@@ -12,7 +12,7 @@ datasource db {
 enum Role {
   ADMIN
   ACCOUNTANT
-  CONTACT
+  SALES_PURCHASE
 }
 
 enum ContactType {
@@ -95,7 +95,7 @@ model User {
   name         String
   email        String    @unique
   passwordHash String
-  role         Role      @default(CONTACT)
+  role         Role      @default(SALES_PURCHASE)
   contactId    String?
   contact      Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
   isActive     Boolean   @default(true)

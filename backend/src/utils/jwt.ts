@@ -4,7 +4,7 @@ import { env } from '../config/env.js';
 export interface TokenPayload {
   userId: string;
   email: string;
-  role: 'ADMIN' | 'ACCOUNTANT' | 'CONTACT';
+  role: 'ADMIN' | 'ACCOUNTANT' | 'SALES_PURCHASE';
   contactId?: string | null;
 }
 

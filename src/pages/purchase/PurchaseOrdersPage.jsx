@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
-import { PageHeader, Card, Table, StatusBadge, Button, Modal, Input, Select } from '../../components/common/UIComponents';
+import { PageHeader, Card, Table, StatusBadge, Button, Modal, Input } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
-import { Plus, Search, Eye, FileText, ShoppingCart } from 'lucide-react';
+import { Plus, Search, Eye, FileText } from 'lucide-react';
 
 export const PurchaseOrdersPage = () => {
   const navigate = useNavigate();
@@ -12,60 +12,134 @@ export const PurchaseOrdersPage = () => {
   const createVendorBillFromPO = useStore((state) => state.createVendorBillFromPO);
   const contacts = useStore((state) => state.contacts);
   const products = useStore((state) => state.products);
+  const fetchPurchaseOrders = useStore((state) => state.fetchPurchaseOrders);
+  const fetchContacts = useStore((state) => state.fetchContacts);
+  const fetchProducts = useStore((state) => state.fetchProducts);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  // PO Form
-  const [vendor, setVendor] = useState(contacts.find(c => c.type === 'Vendor')?.name || 'Azure Furniture');
-  const [productId, setProductId] = useState(products[0]?.id || '');
+  // PO Form — use IDs
+  const [vendorId, setVendorId] = useState('');
+  const [productId, setProductId] = useState('');
   const [qty, setQty] = useState(10);
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const filtered = purchaseOrders.filter((p) => {
-    const matchesSearch = p.id.toLowerCase().includes(search.toLowerCase()) || p.vendor.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || p.status === statusFilter;
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      fetchPurchaseOrders(),
+      fetchContacts(),
+      fetchProducts(),
+    ]).finally(() => setLoading(false));
+  }, [fetchPurchaseOrders, fetchContacts, fetchProducts]);
+
+  // Set default selections once data loads
+  useEffect(() => {
+    const vendors = contacts.filter(c => c.type !== 'CUSTOMER');
+    if (!vendorId && vendors.length > 0) setVendorId(vendors[0].id);
+  }, [contacts, vendorId]);
+
+  useEffect(() => {
+    if (!productId && products.length > 0) setProductId(products[0].id);
+  }, [products, productId]);
+
+  const vendors = contacts.filter(c => c.type !== 'CUSTOMER');
+  const safeOrders = Array.isArray(purchaseOrders) ? purchaseOrders : [];
+
+  const filtered = safeOrders.filter((p) => {
+    const poId = (p.number || p.id || '').toLowerCase();
+    const vendorName = (p.vendor?.name || p.vendorName || '').toLowerCase();
+    const matchesSearch = poId.includes(search.toLowerCase()) || vendorName.includes(search.toLowerCase());
+    const poStatus = (p.status || '').toUpperCase();
+    const matchesStatus =
+      statusFilter === 'All' ||
+      poStatus === statusFilter.toUpperCase() ||
+      p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const handleCreatePO = (e) => {
+  const handleCreatePO = async (e) => {
     e.preventDefault();
-    const prod = products.find(p => p.id === productId) || products[0];
-    const subtotal = prod.purchasePrice * Number(qty);
-    const tax = Math.round(subtotal * (prod.taxRate / 100));
+    setFormError('');
 
-    addPurchaseOrder({
-      vendor,
-      vendorId: contacts.find(c => c.name === vendor)?.id || 'VEND-001',
-      items: [{ productId: prod.id, productName: prod.name, qty: Number(qty), unitPrice: prod.purchasePrice, taxRate: prod.taxRate, subtotal }],
-      subtotal,
-      tax,
-      total: subtotal + tax
-    });
-    setIsAddModalOpen(false);
+    if (!vendorId) { setFormError('Please select a vendor.'); return; }
+    if (!productId) { setFormError('Please select a product.'); return; }
+    if (!qty || Number(qty) < 1) { setFormError('Quantity must be at least 1.'); return; }
+
+    const prod = products.find(p => p.id === productId);
+    if (!prod) { setFormError('Selected product not found. Please refresh.'); return; }
+
+    setSubmitting(true);
+    try {
+      await addPurchaseOrder({
+        vendorId,
+        date: orderDate,
+        items: [{
+          productId: prod.id,
+          quantity: Number(qty),
+          unitPrice: Number(prod.purchasePrice),
+          taxRate: Number(prod.taxRate || 18),
+        }],
+      });
+      setIsAddModalOpen(false);
+      setQty(10);
+      setFormError('');
+    } catch (err) {
+      console.error('Create PO error:', err);
+      setFormError(err.message || 'Failed to create purchase order. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateBill = async (poId, e) => {
+    e.stopPropagation();
+    try {
+      await createVendorBillFromPO(poId);
+      navigate('/purchase/bills');
+    } catch (err) {
+      console.error('Create bill error:', err);
+      alert(err.message || 'Failed to create vendor bill.');
+    }
   };
 
   const columns = [
     {
       header: 'PO Number',
-      cell: (r) => <span className="font-mono font-bold text-amber-900">{r.id}</span>
+      cell: (r) => <span className="font-mono font-bold text-amber-900">{r.number || r.id}</span>
     },
-    { header: 'Vendor', cell: (r) => <span className="font-medium text-gray-900">{r.vendor}</span> },
-    { header: 'Order Date', accessor: 'date' },
+    {
+      header: 'Vendor',
+      cell: (r) => <span className="font-medium text-gray-900">{r.vendor?.name || r.vendorName || '—'}</span>
+    },
+    {
+      header: 'Order Date',
+      cell: (r) => {
+        const d = r.date || r.createdAt;
+        return d ? new Date(d).toLocaleDateString('en-IN') : '—';
+      }
+    },
     {
       header: 'Products Summary',
       cell: (r) => (
         <span className="text-xs text-gray-600">
-          {r.items?.map(i => `${i.productName} (x${i.qty})`).join(', ')}
+          {(r.items || []).map(i => `${i.product?.name || i.productName || 'Item'} (x${i.quantity || i.qty || 0})`).join(', ') || '—'}
         </span>
       )
     },
     {
       header: 'Total Cost (₹)',
-      cell: (r) => <span className="font-bold text-gray-900">₹{r.total.toLocaleString('en-IN')}</span>
+      cell: (r) => {
+        const total = Number(r.totalAmount || r.total || 0);
+        return <span className="font-bold text-gray-900">₹{total.toLocaleString('en-IN')}</span>;
+      }
     },
     { header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
-    { header: 'Bill Status', cell: (r) => <StatusBadge status={r.billStatus} /> },
     {
       header: 'Actions',
       cell: (r) => (
@@ -73,15 +147,12 @@ export const PurchaseOrdersPage = () => {
           <Button size="sm" variant="ghost" icon={Eye} onClick={() => navigate(`/purchase/orders/${r.id}`)}>
             View
           </Button>
-          {r.status !== 'Billed' && (
+          {r.status !== 'BILLED' && r.status !== 'Billed' && (
             <Button
               size="sm"
               variant="teal"
               icon={FileText}
-              onClick={() => {
-                createVendorBillFromPO(r.id);
-                navigate('/purchase/bills');
-              }}
+              onClick={(e) => handleCreateBill(r.id, e)}
             >
               Create Bill
             </Button>
@@ -120,7 +191,7 @@ export const PurchaseOrdersPage = () => {
           </div>
 
           <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto">
-            {['All', 'Draft', 'Confirmed', 'Received', 'Billed'].map((st) => (
+            {['All', 'DRAFT', 'CONFIRMED', 'RECEIVED', 'BILLED', 'CANCELLED'].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -130,35 +201,117 @@ export const PurchaseOrdersPage = () => {
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
                 }`}
               >
-                {st}
+                {st === 'All' ? 'All' : st.charAt(0) + st.slice(1).toLowerCase()}
               </button>
             ))}
           </div>
         </div>
 
-        <Table columns={columns} data={filtered} onRowClick={(row) => navigate(`/purchase/orders/${row.id}`)} />
+        {loading ? (
+          <div className="py-12 text-center text-gray-500 text-sm">Loading purchase orders from database...</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-gray-500 text-sm">No purchase orders found.</div>
+        ) : (
+          <Table columns={columns} data={filtered} onRowClick={(row) => navigate(`/purchase/orders/${row.id}`)} />
+        )}
       </Card>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="+ Create Purchase Order">
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setFormError(''); }} title="+ Create Purchase Order">
         <form onSubmit={handleCreatePO} className="space-y-4">
-          <Select
-            label="Vendor"
-            required
-            value={vendor}
-            onChange={(e) => setVendor(e.target.value)}
-            options={contacts.filter(c => c.type !== 'Customer').map(c => ({ label: c.name, value: c.name }))}
-          />
-          <Select
-            label="Product Item"
-            required
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            options={products.map(p => ({ label: `${p.name} — Cost: ₹${p.purchasePrice.toLocaleString('en-IN')}`, value: p.id }))}
-          />
-          <Input label="Quantity" type="number" min="1" required value={qty} onChange={(e) => setQty(e.target.value)} />
+          {formError && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">
+              {formError}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Vendor *</label>
+            <select
+              required
+              value={vendorId}
+              onChange={(e) => setVendorId(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-purple-800"
+            >
+              <option value="">— Select Vendor —</option>
+              {vendors.map(c => (
+                <option key={c.id} value={c.id}>{c.name} {c.email ? `(${c.email})` : ''}</option>
+              ))}
+            </select>
+            {vendors.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">No vendors found. Add contacts first.</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Product *</label>
+            <select
+              required
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-purple-800"
+            >
+              <option value="">— Select Product —</option>
+              {products.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — Cost: ₹{Number(p.purchasePrice).toLocaleString('en-IN')} (GST: {p.taxRate}%)
+                </option>
+              ))}
+            </select>
+            {products.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">No products found. Add products first.</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Quantity *</label>
+            <input
+              type="number"
+              min="1"
+              required
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-purple-800"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Order Date</label>
+            <input
+              type="date"
+              value={orderDate}
+              onChange={(e) => setOrderDate(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-purple-800"
+            />
+          </div>
+
+          {productId && products.find(p => p.id === productId) && (() => {
+            const prod = products.find(p => p.id === productId);
+            const subtotal = Number(prod.purchasePrice) * Number(qty || 0);
+            const tax = (subtotal * Number(prod.taxRate || 18)) / 100;
+            const total = subtotal + tax;
+            return (
+              <div className="p-3 bg-amber-50 rounded-lg text-xs text-amber-900 space-y-1 border border-amber-100">
+                <div className="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span className="font-semibold">₹{subtotal.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>GST ({prod.taxRate}%):</span>
+                  <span className="font-semibold">₹{tax.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between font-bold border-t border-amber-200 pt-1">
+                  <span>Total:</span>
+                  <span>₹{total.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="teal">Confirm Purchase Order</Button>
+            <Button type="button" variant="secondary" onClick={() => { setIsAddModalOpen(false); setFormError(''); }}>Cancel</Button>
+            <Button type="submit" variant="teal" disabled={submitting || !vendorId || !productId}>
+              {submitting ? 'Creating...' : 'Confirm Purchase Order'}
+            </Button>
           </div>
         </form>
       </Modal>

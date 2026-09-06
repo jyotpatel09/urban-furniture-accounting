@@ -6,9 +6,10 @@ import { validateBody } from '../../middleware/validation.middleware.js';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requireRole('ADMIN', 'ACCOUNTANT'));
 
 router.get('/', getBudgets);
 router.get('/:id', getBudgetById);
-router.post('/', requireRole('ADMIN', 'ACCOUNTANT'), validateBody(createBudgetSchema), createBudget);
+router.post('/', validateBody(createBudgetSchema), createBudget);
 
 export default router;
