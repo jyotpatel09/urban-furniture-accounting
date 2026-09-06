@@ -12,26 +12,30 @@ export const PurchasePaymentsPage = () => {
   const allPayments = bills.flatMap((bill) =>
     (bill.payments || []).map((p) => ({
       ...p,
+      billNumber: bill.number || bill.id,
       billId: bill.id,
-      vendor: bill.vendor,
+      vendorName: bill.vendor?.name || 'Unknown',
     }))
   );
 
   const columns = [
     {
       header: 'Payment Ref',
-      cell: (r) => <span className="font-mono font-bold text-amber-900">{r.ref}</span>
+      cell: (r) => <span className="font-mono font-bold text-amber-900">{r.reference || r.ref || '—'}</span>
     },
-    { header: 'Vendor', accessor: 'vendor' },
+    { header: 'Vendor', accessor: 'vendorName' },
     {
       header: 'Linked Bill',
-      cell: (r) => <span className="font-mono text-purple-900 font-semibold">{r.billId}</span>
+      cell: (r) => <span className="font-mono text-purple-900 font-semibold">{r.billNumber}</span>
     },
-    { header: 'Disbursement Date', accessor: 'date' },
-    { header: 'Payment Method', accessor: 'method' },
+    { 
+      header: 'Disbursement Date', 
+      cell: (r) => <span>{r.paymentDate || r.date ? new Date(r.paymentDate || r.date).toLocaleDateString('en-IN') : '—'}</span> 
+    },
+    { header: 'Method', accessor: 'method' },
     {
       header: 'Amount Paid (₹)',
-      cell: (r) => <span className="font-bold text-rose-600">₹{r.amount.toLocaleString('en-IN')}</span>
+      cell: (r) => <span className="font-bold text-rose-600">₹{Number(r.amount || 0).toLocaleString('en-IN')}</span>
     },
     {
       header: 'Actions',

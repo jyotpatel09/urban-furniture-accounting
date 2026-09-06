@@ -1,24 +1,38 @@
-import React, { useState } from 'react';
-import { useStore } from '../../store/useStore';
+import React, { useState, useEffect } from 'react';
+import { reportsService } from '../../services';
 import { PageHeader, Card, Button } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
-import { Printer, Download, Calendar, CheckCircle } from 'lucide-react';
+import { Printer, Calendar, CheckCircle, AlertTriangle } from 'lucide-react';
 
 export const BalanceSheetPage = () => {
-  const accounts = useStore((state) => state.chartOfAccounts);
-  const [asOfDate, setAsOfDate] = useState('2026-09-05');
+  const [asOfDate, setAsOfDate] = useState(new Date().toISOString().split('T')[0]);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const assets = accounts.filter(a => a.category === 'ASSETS');
-  const liabilities = accounts.filter(a => a.category === 'LIABILITIES');
-  const capital = accounts.filter(a => a.category === 'CAPITAL');
+  useEffect(() => {
+    const fetchReport = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await reportsService.getBalanceSheet({ asOfDate });
+        setData(res);
+      } catch (err) {
+        setError(err.message || 'Failed to load Balance Sheet');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchReport();
+  }, [asOfDate]);
 
-  const totalAssets = assets.reduce((sum, a) => sum + a.balance, 0);
-  const totalLiabilities = liabilities.reduce((sum, a) => sum + a.balance, 0);
-  const totalCapital = capital.reduce((sum, a) => sum + a.balance, 0);
+  const handlePrint = () => window.print();
 
-  const handlePrint = () => {
-    window.print();
-  };
+  if (loading) return <div className="p-8 text-center text-gray-500">Generating report from General Ledger...</div>;
+  if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
+  if (!data) return <div className="p-8 text-center text-gray-500">No data available.</div>;
+
+  const { totalAssets = 0, totalLiabilities = 0, totalCapital = 0, assets = [], liabilities = [], capital = [], isBalanced = false } = data;
 
   return (
     <div className="space-y-6">
@@ -47,10 +61,18 @@ export const BalanceSheetPage = () => {
         }
       />
 
+      <div className={`p-4 rounded-xl border flex items-center gap-3 ${isBalanced ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+        {isBalanced ? <CheckCircle className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
+        <div>
+          <h3 className="font-bold text-sm">{isBalanced ? 'Balance Sheet is perfectly balanced' : 'Accounting Equation Mismatch'}</h3>
+          <p className="text-xs mt-0.5">Assets (₹{totalAssets.toLocaleString('en-IN')}) {isBalanced ? '=' : '≠'} Liabilities + Capital (₹{(totalLiabilities + totalCapital).toLocaleString('en-IN')})</p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ASSETS SECTION */}
         <Card title="ASSETS (Current & Fixed Assets)" className="border-t-4 border-t-purple-800">
           <div className="space-y-3">
+            {assets.length === 0 && <p className="text-xs text-gray-400">No assets recorded.</p>}
             {assets.map((a) => (
               <div key={a.code} className="flex justify-between py-2 border-b border-gray-100 text-xs">
                 <div>
@@ -60,7 +82,6 @@ export const BalanceSheetPage = () => {
                 <span className="font-bold text-gray-900">₹{a.balance.toLocaleString('en-IN')}</span>
               </div>
             ))}
-
             <div className="pt-3 border-t-2 border-gray-900 flex justify-between items-center text-sm font-bold text-purple-900">
               <span>TOTAL ASSETS:</span>
               <span>₹{totalAssets.toLocaleString('en-IN')}</span>
@@ -68,10 +89,10 @@ export const BalanceSheetPage = () => {
           </div>
         </Card>
 
-        {/* LIABILITIES & CAPITAL SECTION */}
         <div className="space-y-6">
           <Card title="LIABILITIES (Current & Long-Term)" className="border-t-4 border-t-rose-600">
             <div className="space-y-3">
+              {liabilities.length === 0 && <p className="text-xs text-gray-400">No liabilities recorded.</p>}
               {liabilities.map((l) => (
                 <div key={l.code} className="flex justify-between py-2 border-b border-gray-100 text-xs">
                   <div>
@@ -81,7 +102,6 @@ export const BalanceSheetPage = () => {
                   <span className="font-bold text-gray-900">₹{l.balance.toLocaleString('en-IN')}</span>
                 </div>
               ))}
-
               <div className="pt-3 border-t-2 border-gray-900 flex justify-between items-center text-sm font-bold text-rose-700">
                 <span>TOTAL LIABILITIES:</span>
                 <span>₹{totalLiabilities.toLocaleString('en-IN')}</span>
@@ -91,6 +111,7 @@ export const BalanceSheetPage = () => {
 
           <Card title="CAPITAL & EQUITY" className="border-t-4 border-t-teal-600">
             <div className="space-y-3">
+              {capital.length === 0 && <p className="text-xs text-gray-400">No capital recorded.</p>}
               {capital.map((c) => (
                 <div key={c.code} className="flex justify-between py-2 border-b border-gray-100 text-xs">
                   <div>
@@ -100,7 +121,6 @@ export const BalanceSheetPage = () => {
                   <span className="font-bold text-gray-900">₹{c.balance.toLocaleString('en-IN')}</span>
                 </div>
               ))}
-
               <div className="pt-3 border-t-2 border-gray-900 flex justify-between items-center text-sm font-bold text-teal-800">
                 <span>TOTAL LIABILITIES & CAPITAL:</span>
                 <span>₹{(totalLiabilities + totalCapital).toLocaleString('en-IN')}</span>

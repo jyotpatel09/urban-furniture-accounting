@@ -1,30 +1,49 @@
-import React, { useState } from 'react';
-import { useStore } from '../../store/useStore';
+import React, { useState, useEffect } from 'react';
+import { reportsService } from '../../services';
 import { PageHeader, Card, Button } from '../../components/common/UIComponents';
 import { WorkflowBanner } from '../../components/common/WorkflowBanner';
-import { Printer, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { Printer, TrendingUp } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
 export const ProfitLossPage = () => {
-  const accounts = useStore((state) => state.chartOfAccounts);
-  const [period, setPeriod] = useState('Q3 2026');
+  const [period, setPeriod] = useState('YTD');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const income = accounts.filter(a => a.category === 'INCOME');
-  const expenses = accounts.filter(a => a.category === 'EXPENSES');
+  useEffect(() => {
+    const fetchReport = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        // We request a wide date range to ensure demo data is captured
+        const params = { startDate: '2026-01-01', endDate: '2026-12-31' };
+        const res = await reportsService.getProfitLoss(params);
+        setData(res);
+      } catch (err) {
+        setError(err.message || 'Failed to load Profit & Loss report');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchReport();
+  }, [period]);
 
-  const totalIncome = income.reduce((sum, a) => sum + a.balance, 0);
-  const totalExpenses = expenses.reduce((sum, a) => sum + a.balance, 0);
-  const netProfit = totalIncome - totalExpenses;
+  const handlePrint = () => window.print();
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Generating report from General Ledger...</div>;
+  if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
+  if (!data) return <div className="p-8 text-center text-gray-500">No data available.</div>;
+
+  const { totalIncome = 0, totalExpenses = 0, netProfit = 0, incomeBreakdown = [], expenseBreakdown = [] } = data;
 
   const chartData = [
     { category: 'Operating Income', Amount: totalIncome },
-    { category: 'Cost of Goods Sold & Expenses', Amount: totalExpenses },
-    { category: 'Net Operating Profit', Amount: netProfit }
+    { category: 'Expenses & COGS', Amount: totalExpenses },
+    { category: 'Net Profit', Amount: netProfit }
   ];
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const netMargin = totalIncome > 0 ? Math.round((netProfit / totalIncome) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -41,9 +60,7 @@ export const ProfitLossPage = () => {
               onChange={(e) => setPeriod(e.target.value)}
               className="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-xs font-semibold"
             >
-              <option>September 2026</option>
-              <option>Q3 2026</option>
-              <option>FY 2026-27</option>
+              <option value="YTD">FY 2026 (YTD)</option>
             </select>
             <Button variant="secondary" icon={Printer} onClick={handlePrint}>
               Print P&L
@@ -52,12 +69,11 @@ export const ProfitLossPage = () => {
         }
       />
 
-      {/* Net Profit Banner */}
       <div className="bg-gradient-to-r from-purple-900 to-teal-800 text-white rounded-xl p-6 shadow-md flex justify-between items-center">
         <div>
           <span className="text-xs uppercase font-bold text-teal-300 tracking-wider">Net Operating Profit ({period})</span>
           <h2 className="text-3xl font-bold mt-1">₹{netProfit.toLocaleString('en-IN')}</h2>
-          <p className="text-xs text-purple-200 mt-1">Net Margin: {Math.round((netProfit / totalIncome) * 100)}%</p>
+          <p className="text-xs text-purple-200 mt-1">Net Margin: {netMargin}%</p>
         </div>
         <div className="p-3 bg-white/10 rounded-xl">
           <TrendingUp className="w-8 h-8 text-teal-300" />
@@ -65,19 +81,18 @@ export const ProfitLossPage = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* INCOME */}
         <Card title="INCOME & REVENUE" className="border-t-4 border-t-purple-800">
           <div className="space-y-3">
-            {income.map((i) => (
+            {incomeBreakdown.length === 0 && <p className="text-xs text-gray-400">No income recorded in this period.</p>}
+            {incomeBreakdown.map((i) => (
               <div key={i.code} className="flex justify-between py-2 border-b border-gray-100 text-xs">
                 <div>
                   <span className="font-semibold text-gray-900">{i.name}</span>
                   <span className="text-[10px] text-gray-400 block font-mono">Code: {i.code}</span>
                 </div>
-                <span className="font-bold text-gray-900">₹{i.balance.toLocaleString('en-IN')}</span>
+                <span className="font-bold text-gray-900">₹{i.amount.toLocaleString('en-IN')}</span>
               </div>
             ))}
-
             <div className="pt-3 border-t-2 border-gray-900 flex justify-between items-center text-sm font-bold text-purple-900">
               <span>TOTAL REVENUE:</span>
               <span>₹{totalIncome.toLocaleString('en-IN')}</span>
@@ -85,19 +100,18 @@ export const ProfitLossPage = () => {
           </div>
         </Card>
 
-        {/* EXPENSES */}
         <Card title="EXPENSES & COGS" className="border-t-4 border-t-amber-600">
           <div className="space-y-3">
-            {expenses.map((e) => (
+            {expenseBreakdown.length === 0 && <p className="text-xs text-gray-400">No expenses recorded in this period.</p>}
+            {expenseBreakdown.map((e) => (
               <div key={e.code} className="flex justify-between py-2 border-b border-gray-100 text-xs">
                 <div>
                   <span className="font-semibold text-gray-900">{e.name}</span>
                   <span className="text-[10px] text-gray-400 block font-mono">Code: {e.code}</span>
                 </div>
-                <span className="font-bold text-gray-900">₹{e.balance.toLocaleString('en-IN')}</span>
+                <span className="font-bold text-gray-900">₹{e.amount.toLocaleString('en-IN')}</span>
               </div>
             ))}
-
             <div className="pt-3 border-t-2 border-gray-900 flex justify-between items-center text-sm font-bold text-amber-900">
               <span>TOTAL EXPENSES:</span>
               <span>₹{totalExpenses.toLocaleString('en-IN')}</span>
@@ -106,7 +120,6 @@ export const ProfitLossPage = () => {
         </Card>
       </div>
 
-      {/* Visual Chart Card */}
       <Card title="Income vs Expense Visual Summary">
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">

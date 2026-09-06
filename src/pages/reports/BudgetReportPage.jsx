@@ -11,6 +11,15 @@ export const BudgetReportPage = () => {
     window.print();
   };
 
+  const formattedBudgets = budgets.map(b => ({
+    ...b,
+    actualSpend: Number(b.achievedAmount || 0),
+    plannedAmt: Number(b.plannedAmount || 0),
+    varianceAmt: Number(b.variance || (Number(b.plannedAmount || 0) - Number(b.achievedAmount || 0))),
+    utilPct: Number(b.utilization || 0),
+    analyticName: b.analyticAccount?.name || b.analyticAccountId || 'General'
+  }));
+
   const columns = [
     {
       header: 'Budget Name',
@@ -21,33 +30,30 @@ export const BudgetReportPage = () => {
         </div>
       )
     },
-    { header: 'Analytic Account', accessor: 'analyticAccount' },
+    { header: 'Analytic Account', accessor: 'analyticName' },
     {
       header: 'Planned Amount (₹)',
-      cell: (r) => <span className="font-bold text-gray-900">₹{r.plannedAmount.toLocaleString('en-IN')}</span>
+      cell: (r) => <span className="font-bold text-gray-900">₹{r.plannedAmt.toLocaleString('en-IN')}</span>
     },
     {
       header: 'Actual Spend (₹)',
-      cell: (r) => <span className="font-bold text-purple-900">₹{r.actualAmount.toLocaleString('en-IN')}</span>
+      cell: (r) => <span className="font-bold text-purple-900">₹{r.actualSpend.toLocaleString('en-IN')}</span>
     },
     {
       header: 'Variance (₹)',
-      cell: (r) => {
-        const variance = r.plannedAmount - r.actualAmount;
-        return (
-          <span className={`font-bold ${variance >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-            ₹{variance.toLocaleString('en-IN')}
-          </span>
-        );
-      }
+      cell: (r) => (
+        <span className={`font-bold ${r.varianceAmt >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+          ₹{r.varianceAmt.toLocaleString('en-IN')}
+        </span>
+      )
     },
     {
       header: 'Utilization',
       cell: (r) => (
         <span className={`font-bold px-2 py-0.5 rounded text-xs ${
-          r.utilization > 80 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+          r.utilPct > 80 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
         }`}>
-          {r.utilization}%
+          {r.utilPct}%
         </span>
       )
     }
@@ -69,7 +75,7 @@ export const BudgetReportPage = () => {
       />
 
       <Card>
-        <Table columns={columns} data={budgets} />
+        <Table columns={columns} data={formattedBudgets} emptyMessage="No budgets defined." />
       </Card>
     </div>
   );

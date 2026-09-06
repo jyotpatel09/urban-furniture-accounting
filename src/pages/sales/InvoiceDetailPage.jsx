@@ -21,6 +21,7 @@ export const InvoiceDetailPage = () => {
   const [payRef, setPayRef] = useState('');
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payError, setPayError] = useState('');
+  const [postSubmitting, setPostSubmitting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -44,13 +45,31 @@ export const InvoiceDetailPage = () => {
   if (!inv) return <div className="p-8 text-center text-gray-500">Invoice not found.</div>;
 
   const customerName = inv.customer?.name || inv.customerName || '—';
-  const amount = Number(inv.totalAmount || inv.amount || 0);
+  const amount = Number(inv.totalAmount || inv.total || 0);
   const paid = Number(inv.paidAmount || inv.paid || 0);
-  const remaining = Number(inv.remainingAmount || inv.remaining || 0);
+  const remaining = Number(inv.remainingAmount || inv.outstanding || inv.remaining || 0);
   const invoiceDate = inv.invoiceDate || inv.date;
   const dueDate = inv.dueDate;
   const items = Array.isArray(inv.items) ? inv.items : [];
   const payments = Array.isArray(inv.payments) ? inv.payments : [];
+
+  const isDraft = inv.status === 'DRAFT';
+  const isCancelled = inv.status === 'CANCELLED';
+  const canPay = !isDraft && !isCancelled && remaining > 0;
+
+  const handlePostInvoice = async () => {
+    if (!window.confirm('Are you sure you want to post this invoice? This will create journal entries and cannot be undone.')) return;
+    setPostSubmitting(true);
+    try {
+      await salesService.postInvoice(id);
+      const updated = await salesService.getInvoiceById(id);
+      setInv(updated);
+    } catch (err) {
+      alert(err.message || 'Failed to post invoice.');
+    } finally {
+      setPostSubmitting(false);
+    }
+  };
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -87,7 +106,12 @@ export const InvoiceDetailPage = () => {
             <Button variant="secondary" icon={Printer} onClick={() => window.print()}>
               Print Invoice
             </Button>
-            {remaining > 0 && (
+            {isDraft && (
+              <Button variant="primary" icon={BookOpen} onClick={handlePostInvoice} disabled={postSubmitting}>
+                {postSubmitting ? 'Posting...' : 'Confirm & Post Invoice'}
+              </Button>
+            )}
+            {canPay && (
               <Button variant="teal" icon={CreditCard} onClick={() => setIsPayModalOpen(true)}>
                 Register Payment
               </Button>

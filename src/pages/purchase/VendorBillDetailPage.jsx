@@ -21,6 +21,7 @@ export const VendorBillDetailPage = () => {
   const [payRef, setPayRef] = useState('');
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payError, setPayError] = useState('');
+  const [postSubmitting, setPostSubmitting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -30,27 +31,45 @@ export const VendorBillDetailPage = () => {
         setBill(data);
         const remaining = Number(data.remainingAmount || data.remaining || 0);
         setPayAmount(remaining);
-        setPayRef(`PAY-V-${Date.now().toString().slice(-4)}`);
+        setPayRef(`DISB-V-${Date.now().toString().slice(-4)}`);
       })
       .catch(err => {
         console.error('Failed to load vendor bill:', err);
-        setError(err.message || 'Failed to load vendor bill.');
+        setError(err.message || 'Failed to load bill.');
       })
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Loading vendor bill...</div>;
+  if (loading) return <div className="p-8 text-center text-gray-500">Loading bill...</div>;
   if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
-  if (!bill) return <div className="p-8 text-center text-gray-500">Vendor Bill not found.</div>;
+  if (!bill) return <div className="p-8 text-center text-gray-500">Bill not found.</div>;
 
   const vendorName = bill.vendor?.name || bill.vendorName || '—';
-  const amount = Number(bill.totalAmount || bill.amount || 0);
+  const amount = Number(bill.totalAmount || bill.total || 0);
   const paid = Number(bill.paidAmount || bill.paid || 0);
   const remaining = Number(bill.remainingAmount || bill.remaining || 0);
   const billDate = bill.billDate || bill.date;
   const dueDate = bill.dueDate;
   const items = Array.isArray(bill.items) ? bill.items : [];
   const payments = Array.isArray(bill.payments) ? bill.payments : [];
+
+  const isDraft = bill.status === 'DRAFT';
+  const isCancelled = bill.status === 'CANCELLED';
+  const canPay = !isDraft && !isCancelled && remaining > 0;
+
+  const handlePostBill = async () => {
+    if (!window.confirm('Are you sure you want to post this vendor bill? This will create journal entries and cannot be undone.')) return;
+    setPostSubmitting(true);
+    try {
+      await purchaseService.postBill(id);
+      const updated = await purchaseService.getBillById(id);
+      setBill(updated);
+    } catch (err) {
+      alert(err.message || 'Failed to post vendor bill.');
+    } finally {
+      setPostSubmitting(false);
+    }
+  };
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -87,7 +106,12 @@ export const VendorBillDetailPage = () => {
             <Button variant="secondary" icon={Printer} onClick={() => window.print()}>
               Print Bill
             </Button>
-            {remaining > 0 && (
+            {isDraft && (
+              <Button variant="primary" icon={BookOpen} onClick={handlePostBill} disabled={postSubmitting}>
+                {postSubmitting ? 'Posting...' : 'Confirm & Post Bill'}
+              </Button>
+            )}
+            {canPay && (
               <Button variant="teal" icon={CreditCard} onClick={() => setIsPayModalOpen(true)}>
                 Register Payment
               </Button>
